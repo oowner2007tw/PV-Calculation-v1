@@ -426,7 +426,7 @@
                         </div>
                     </div>
 
-                    <!-- 接地 / Breaker Standard -->
+                    <!-- 接地 / 斷路器標準 -->
                     <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                         <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
                             <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">接地種類 (Ground Types)</h4>
@@ -438,16 +438,16 @@
                             </div>
                         </div>
                         <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
-                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">接地對應線徑 (Ground Wire Sizes)</h4>
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">接地導線線徑 (Grounding Conductor Wire Sizing)</h4>
                             <div class="overflow-auto flex-grow text-xs border rounded">
                                 <table class="w-full text-center">
-                                    <thead class="bg-gray-50 sticky top-0" id="groundWireTableHeader"></thead>
-                                    <tbody id="groundWireTableBody"></tbody>
+                                    <thead class="bg-gray-50 sticky top-0" id="groundingConductorWireSizingTableHeader"></thead>
+                                    <tbody id="groundingConductorWireSizingTableBody"></tbody>
                                 </table>
                             </div>
                         </div>
                         <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
-                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">Breaker Standard</h4>
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">斷路器標準 (Breaker Standards)</h4>
                             <div class="overflow-auto flex-grow text-xs border rounded">
                                 <table class="w-full text-center">
                                     <thead class="bg-gray-50 sticky top-0" id="breakerStdTableHeader"></thead>
@@ -760,7 +760,7 @@
                 ampPVC: [], ampMetal60: [], ampMetal75: [], ampMetal90: [], 
                 conduit: [], conduitFlexNonMetal: [], conduitThickMetal: [], conduitThinMetal: [], 
                 inverterImages: [],
-                groundTypes: [], groundWireSizes: [], breakerStandards: []
+                groundTypes: [], groundingConductorWireSizing: [], breakerStandards: []
             },
             reportData: { params: {}, vd: [], sc: [], planning: [] },
             roofs: [],
@@ -956,15 +956,15 @@
                             ['grounding_types', 'ground_types', 'ground_type', 'earthing_types', 'earthing_type', '接地種類'],
                             '接地種類'
                         );
-                        const groundWireSizes = await fetchOptionalByCandidates(
-                            // 指定：對應到 Supabase grounding_wire_sizing table
-                            ['grounding_wire_sizing', 'grounding_wire_sizes', 'ground_wire_sizes', 'grounding_wire_size_map', 'ground_wire_size_map', 'earthing_wire_sizes', '接地對應線徑'],
-                            '接地對應線徑'
+                        const groundingConductorWireSizing = await fetchOptionalByCandidates(
+                            // 接地導線線徑
+                            ['grounding_wire_sizing', 'grounding_conductor_wire_sizing', 'grounding_conductor_sizing', 'grounding_wire_sizes', 'ground_wire_sizes', 'earthing_wire_sizes', '接地導線線徑'],
+                            '接地導線線徑'
                         );
                         const breakerStandards = await fetchOptionalByCandidates(
                             // 指定：對應到 Supabase Breaker Standards table
                             ['Breaker Standards', 'breaker_standards', 'breaker_standard', 'breaker_standard_table', 'breakerStandards', 'breaker', 'breaker_specs'],
-                            'Breaker Standard'
+                            '斷路器標準'
                         );
                         
                         App.cache = { 
@@ -981,7 +981,7 @@
                             conduitThinMetal: pipeThinMetal.data||[], 
                             inverterImages: img.data||[],
                             groundTypes: groundTypes.data || [],
-                            groundWireSizes: groundWireSizes.data || [],
+                            groundingConductorWireSizing: groundingConductorWireSizing.data || [],
                             breakerStandards: breakerStandards.data || []
                         };
                         
@@ -1555,7 +1555,7 @@
                    };
                    
                    renderGenericTable(App.cache.groundTypes, 'groundTypeTableHeader', 'groundTypeTableBody');
-                   renderGenericTable(App.cache.groundWireSizes, 'groundWireTableHeader', 'groundWireTableBody');
+                   renderGenericTable(App.cache.groundingConductorWireSizing, 'groundingConductorWireSizingTableHeader', 'groundingConductorWireSizingTableBody');
                    renderGenericTable(App.cache.breakerStandards, 'breakerStdTableHeader', 'breakerStdTableBody');
                    
                    if(document.getElementById('inverterTableBody')) document.getElementById('inverterTableBody').innerHTML = App.cache.inverters.map((i,x)=>`<tr class="cursor-pointer border-b hover:bg-blue-50 transition" onclick="App.ui.openDetail('inverter',${x})"><td class="p-3 text-blue-600 font-bold">${i.model_name}</td><td class="p-3">${i.rated_output_power_kw}</td><td class="p-3">${i.max_input_voltage_v}</td><td class="p-3">${i.num_mpp_trackers}</td><td class="p-3">${i.max_efficiency_percent}%</td><td class="p-3 text-center"><i class="fa-solid fa-info-circle text-gray-400"></i></td></tr>`).join('');
