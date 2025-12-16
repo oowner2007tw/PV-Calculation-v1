@@ -144,41 +144,53 @@
 
     <!-- Device-bound Login -->
     <div id="loginScreen" class="max-w-[640px] mx-auto bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        <div class="px-6 py-5 border-b border-slate-100 bg-gradient-to-br from-blue-600 to-blue-700 text-white">
+        <div class="px-6 py-5 border-b border-slate-100 bg-gradient-to-br from-emerald-600 via-sky-600 to-blue-700 text-white relative overflow-hidden">
+            <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl"></div>
+            <div class="absolute -bottom-14 -left-14 w-48 h-48 rounded-full bg-white/10 blur-2xl"></div>
             <div class="flex items-center gap-3">
                 <div class="bg-white/15 p-2 rounded-xl">
-                    <i class="fa-solid fa-lock text-xl"></i>
+                    <i class="fa-solid fa-solar-panel text-xl"></i>
                 </div>
                 <div>
-                    <div class="text-lg font-bold">登入</div>
-                    <div class="text-xs text-white/80">通行碼 + 裝置綁定驗證</div>
+                    <div class="text-lg font-bold">太陽光電規劃系統登入</div>
+                    <div class="text-xs text-white/80">再生能源 · 太陽光電 · 工程規劃</div>
                 </div>
             </div>
         </div>
-        <div class="px-6 pt-6">
-            <div class="rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
-                <img
-                    src="https://imgur.com/gallery/gakki-TO3dm#/t/aragaki_yui"
-                    alt="登入圖片"
-                    class="w-full h-44 object-cover"
-                    referrerpolicy="no-referrer"
-                    onerror="this.onerror=null; this.replaceWith(Object.assign(document.createElement('div'), {className: 'p-3 text-xs text-slate-500', textContent: '圖片載入失敗：此 Imgur 連結可能不是「直接圖片網址」。請改用 i.imgur.com 的直接圖片連結（例如 https://i.imgur.com/xxxx.jpg）'}));"
-                >
+        <div class="p-6 space-y-4 bg-gradient-to-b from-white to-slate-50">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+                    <div class="text-emerald-700 font-bold text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-leaf"></i><span>再生能源</span>
+                    </div>
+                    <div class="text-[11px] text-emerald-900/80 mt-1 leading-relaxed">以數據化設計降低碳足跡</div>
+                </div>
+                <div class="rounded-xl border border-sky-100 bg-sky-50/60 p-3">
+                    <div class="text-sky-700 font-bold text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-sun"></i><span>太陽光電</span>
+                    </div>
+                    <div class="text-[11px] text-sky-900/80 mt-1 leading-relaxed">串列規劃與驗證一站完成</div>
+                </div>
+                <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                    <div class="text-blue-700 font-bold text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line"></i><span>工程規劃</span>
+                    </div>
+                    <div class="text-[11px] text-blue-900/80 mt-1 leading-relaxed">電壓降 / 短路計算自動生成</div>
+                </div>
             </div>
-        </div>
-        <div class="p-6 space-y-4">
+
             <div class="text-sm text-slate-600 leading-relaxed">
-                請輸入通行碼。首次登入會綁定此裝置；之後僅允許同一裝置登入。
+                請輸入通行碼以進入系統。為確保授權安全，首次登入會綁定此裝置；之後僅允許同一裝置登入。
             </div>
             <form id="loginForm" class="space-y-3">
                 <div class="space-y-1">
                     <label class="text-xs font-bold text-slate-500 uppercase">Passcode</label>
                     <input id="passcodeInput" type="password" autocomplete="one-time-code"
-                           class="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition font-mono"
+                           class="w-full border border-gray-300 rounded-lg p-3 bg-white focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none transition font-mono"
                            placeholder="例如：666" required>
                 </div>
                 <button id="loginBtn" type="submit"
-                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-blue-200 disabled:opacity-60 disabled:cursor-not-allowed">
+                        class="w-full bg-gradient-to-r from-emerald-600 via-sky-600 to-blue-700 hover:from-emerald-700 hover:via-sky-700 hover:to-blue-800 text-white font-bold py-3 rounded-lg transition shadow-md shadow-sky-200 disabled:opacity-60 disabled:cursor-not-allowed">
                     驗證並登入
                 </button>
                 <div id="loginMsg" class="text-sm text-red-600 font-semibold hidden"></div>
