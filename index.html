@@ -8,8 +8,8 @@
     <!-- 1. 載入外部函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://openfpcdn.io/fingerprintjs/v4"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
@@ -804,6 +804,7 @@
             auth: {
                 visitorId: null,
                 isReady: false,
+                fpLoadPromise: null,
 
                 init: async () => {
                     App.auth.showApp(false);
@@ -847,14 +848,51 @@
 
                 ensureFingerprint: async () => {
                     if (App.auth.visitorId) return App.auth.visitorId;
-                    if (typeof FingerprintJS === 'undefined' || !FingerprintJS?.load) {
-                        throw new Error('FingerprintJS 未載入（請檢查 CDN）');
-                    }
-                    const fp = await FingerprintJS.load();
+                    await App.auth.ensureFingerprintLibReady();
+                    const fp = await FingerprintJS.load(); // 確保先完成 load() 檢查
                     const res = await fp.get();
                     App.auth.visitorId = res?.visitorId || null;
                     if (!App.auth.visitorId) throw new Error('無法取得設備指紋 visitorId');
                     return App.auth.visitorId;
+                },
+
+                // 確保 FingerprintJS 已載入並可用（含 CDN 載入較慢時的等待）
+                ensureFingerprintLibReady: async () => {
+                    if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) return;
+                    if (App.auth.fpLoadPromise) return App.auth.fpLoadPromise;
+
+                    App.auth.fpLoadPromise = new Promise((resolve, reject) => {
+                        // 若 head 內 script 尚未載入完成，做輪詢等待
+                        const start = Date.now();
+                        const timeoutMs = 8000;
+                        const tick = () => {
+                            if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) {
+                                resolve();
+                                return;
+                            }
+                            if (Date.now() - start > timeoutMs) {
+                                // 最後嘗試：動態插入 script（避免某些情況 head script 未生效）
+                                try {
+                                    const s = document.createElement('script');
+                                    s.src = 'https://openfpcdn.io/fingerprintjs/v4';
+                                    s.async = true;
+                                    s.onload = () => {
+                                        if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) resolve();
+                                        else reject(new Error('FingerprintJS CDN 載入完成但未提供 FingerprintJS.load'));
+                                    };
+                                    s.onerror = () => reject(new Error('FingerprintJS CDN 載入失敗（onerror）'));
+                                    document.head.appendChild(s);
+                                } catch (e) {
+                                    reject(new Error(`FingerprintJS 未載入（請檢查 CDN）：${e?.message || e}`));
+                                }
+                                return;
+                            }
+                            setTimeout(tick, 100);
+                        };
+                        tick();
+                    });
+
+                    return App.auth.fpLoadPromise;
                 },
 
                 setLoading: (loading) => {
@@ -891,7 +929,8 @@
                     el.classList.toggle('hidden', !show);
                 },
 
-                verify: async () => {
+                // verifyAccess：先等 FingerprintJS 就緒，再做 Supabase 查詢
+                verifyAccess: async () => {
                     const passcode = String(document.getElementById('passcodeInput')?.value || '').trim();
                     if (!passcode) {
                         App.auth.setMsg('請輸入通行碼', true);
@@ -902,8 +941,9 @@
                     App.auth.setMsg('', false);
 
                     try {
-                        await App.auth.ensureDb();
+                        // 先確保 FingerprintJS 可用並取得設備指紋，再進行 Supabase 查詢
                         const visitorId = await App.auth.ensureFingerprint();
+                        await App.auth.ensureDb();
 
                         // 依 passcode 讀取 access_control
                         const { data, error } = await App.db
@@ -954,7 +994,10 @@
                     } finally {
                         App.auth.setLoading(false);
                     }
-                }
+                },
+
+                // 相容舊呼叫點
+                verify: async () => App.auth.verifyAccess()
             },
 
             init: async () => {
