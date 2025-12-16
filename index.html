@@ -9,7 +9,6 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
-    <script src="https://openfpcdn.io/fingerprintjs/v4"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
     
@@ -141,52 +140,7 @@
 </head>
 <body class="p-3 md:p-6 min-h-screen">
 
-    <!-- Login Screen (device-bound) -->
-    <div id="loginScreen" class="max-w-[640px] mx-auto bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        <div class="px-6 py-5 border-b border-slate-100 bg-gradient-to-br from-blue-600 to-blue-700 text-white">
-            <div class="flex items-center gap-3">
-                <div class="bg-white/15 p-2 rounded-xl">
-                    <i class="fa-solid fa-shield-halved text-xl"></i>
-                </div>
-                <div>
-                    <div class="text-lg font-bold">裝置綁定登入</div>
-                    <div class="text-xs text-white/80">Device-bound login (Supabase + FingerprintJS)</div>
-                </div>
-            </div>
-        </div>
-        <div class="p-6 space-y-4">
-            <div class="text-sm text-slate-600 leading-relaxed">
-                請輸入通行碼。首次登入會將此瀏覽器裝置綁定；之後僅允許同一裝置登入。
-            </div>
-            <div id="authStatus" class="text-xs rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-600">
-                <div class="font-bold text-slate-700 mb-1"><i class="fa-solid fa-signal mr-1"></i>連線狀態</div>
-                <div id="authStatusLines" class="space-y-0.5">
-                    <div>FingerprintJS：檢查中…</div>
-                    <div>Supabase：檢查中…</div>
-                    <div>`access_control` 權限：檢查中…</div>
-                </div>
-            </div>
-            <form id="loginForm" class="space-y-3">
-                <div class="space-y-1">
-                    <label class="text-xs font-bold text-slate-500 uppercase">Passcode</label>
-                    <input id="passcodeInput" type="password" autocomplete="one-time-code"
-                           class="w-full border border-gray-300 rounded-lg p-3 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition font-mono"
-                           placeholder="Enter passcode" required>
-                </div>
-                <button id="loginBtn" type="submit"
-                        class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-lg transition shadow-md shadow-blue-200 disabled:opacity-60 disabled:cursor-not-allowed">
-                    驗證並登入
-                </button>
-                <div id="loginMsg" class="text-sm text-red-600 font-semibold hidden"></div>
-                <div class="text-[11px] text-slate-500">
-                    系統使用 FingerprintJS 取得裝置 ID（visitorId）並寫入 `access_control.bound_device_id`。
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Main App (hidden until login success) -->
-    <div id="appRoot" class="max-w-[1600px] mx-auto bg-white rounded-2xl shadow-xl min-h-[calc(100vh-3rem)] flex flex-col border border-slate-200 overflow-hidden hidden">
+    <div class="max-w-[1600px] mx-auto bg-white rounded-2xl shadow-xl min-h-[calc(100vh-3rem)] flex flex-col border border-slate-200 overflow-hidden">
         
         <!-- Header -->
         <header class="px-6 py-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center bg-white sticky top-0 z-40 shadow-sm">
@@ -812,212 +766,6 @@
             },
             reportData: { params: {}, vd: [], sc: [], planning: [] },
             roofs: [],
-            auth: {
-                visitorId: null,
-                isAuthed: false,
-
-                init: async () => {
-                    // Default UI state
-                    App.auth.showLogin(true);
-                    App.auth.showApp(false);
-
-                    try {
-                        await App.auth.ensureFingerprint();
-                        await App.auth.ensureDb();
-                        App.auth.bindForm();
-                        // Run non-blocking self-check so you can see whether DB/RLS is blocking
-                        App.auth.selfCheck();
-                        App.auth.setMsg('', false);
-                    } catch (e) {
-                        console.error('Auth init failed:', e);
-                        App.auth.setMsg(`登入初始化失敗：${e?.message || e}`, true);
-                    }
-                },
-
-                bindForm: () => {
-                    const form = document.getElementById('loginForm');
-                    if (!form || form.hasAttribute('data-bound')) return;
-                    form.addEventListener('submit', (e) => {
-                        e.preventDefault();
-                        App.auth.verifyPasscode();
-                    });
-                    form.setAttribute('data-bound', 'true');
-                },
-
-                ensureFingerprint: async () => {
-                    if (App.auth.visitorId) return App.auth.visitorId;
-                    if (typeof FingerprintJS === 'undefined' || !FingerprintJS?.load) {
-                        throw new Error('FingerprintJS 未載入（請檢查 CDN）');
-                    }
-                    const fp = await FingerprintJS.load();
-                    const res = await fp.get();
-                    App.auth.visitorId = res?.visitorId || null;
-                    if (!App.auth.visitorId) throw new Error('無法取得 visitorId');
-                    return App.auth.visitorId;
-                },
-
-                ensureDb: async () => {
-                    if (App.db) return App.db;
-                    if (typeof supabase === 'undefined' || !supabase?.createClient) {
-                        throw new Error('Supabase SDK 未載入（請檢查 CDN）');
-                    }
-                    const { createClient } = supabase;
-                    App.db = createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
-                        auth: { persistSession: false },
-                        db: { schema: 'public' },
-                        global: { headers: { apikey: CONFIG.supabaseKey } }
-                    });
-                    return App.db;
-                },
-
-                setLoading: (isLoading) => {
-                    const btn = document.getElementById('loginBtn');
-                    const inp = document.getElementById('passcodeInput');
-                    if (btn) btn.disabled = !!isLoading;
-                    if (inp) inp.disabled = !!isLoading;
-                    if (btn) btn.innerHTML = isLoading ? '<i class="fa-solid fa-spinner fa-spin mr-2"></i>驗證中...' : '驗證並登入';
-                },
-
-                setMsg: (msg, isError) => {
-                    const el = document.getElementById('loginMsg');
-                    if (!el) return;
-                    if (!msg) {
-                        el.classList.add('hidden');
-                        el.textContent = '';
-                        return;
-                    }
-                    el.textContent = msg;
-                    el.classList.remove('hidden');
-                    el.classList.toggle('text-red-600', !!isError);
-                    el.classList.toggle('text-green-600', !isError);
-                },
-
-                showLogin: (show) => {
-                    const el = document.getElementById('loginScreen');
-                    if (!el) return;
-                    el.classList.toggle('hidden', !show);
-                },
-
-                showApp: (show) => {
-                    const el = document.getElementById('appRoot');
-                    if (!el) return;
-                    el.classList.toggle('hidden', !show);
-                },
-
-                verifyPasscode: async () => {
-                    const passEl = document.getElementById('passcodeInput');
-                    const passcode = String(passEl?.value || '').trim();
-                    if (!passcode) {
-                        App.auth.setMsg('請輸入通行碼', true);
-                        return;
-                    }
-                    App.auth.setLoading(true);
-                    App.auth.setMsg('', false);
-                    try {
-                        await App.auth.ensureFingerprint();
-                        await App.auth.ensureDb();
-
-                        // 1) Fetch passcode record
-                        const { data, error } = await App.db
-                            .from('access_control')
-                            .select('passcode,bound_device_id,is_used')
-                            .eq('passcode', passcode)
-                            .maybeSingle();
-
-                        if (error) {
-                            // 常見：RLS/權限不足會是 42501
-                            const code = error?.code ? ` (${error.code})` : '';
-                            throw new Error(`Supabase 查詢失敗${code}: ${error?.message || error}`);
-                        }
-                        if (!data) {
-                            App.auth.setMsg('通行碼無效或不存在', true);
-                            return;
-                        }
-
-                        const isUsed = !!data.is_used;
-                        const bound = (data.bound_device_id ?? '').toString();
-                        const vid = App.auth.visitorId;
-
-                        // 2) First-time login: bind device and mark used
-                        if (!isUsed) {
-                            const { error: upErr } = await App.db
-                                .from('access_control')
-                                .update({ bound_device_id: vid, is_used: true })
-                                .eq('passcode', passcode)
-                                .eq('is_used', false);
-                            if (upErr) {
-                                const code = upErr?.code ? ` (${upErr.code})` : '';
-                                throw new Error(`Supabase 更新失敗${code}: ${upErr?.message || upErr}`);
-                            }
-                        } else {
-                            // 3) Returning user: validate device id
-                            if (!bound || bound !== vid) {
-                                App.auth.setMsg('此通行碼已綁定其他裝置，拒絕存取', true);
-                                return;
-                            }
-                        }
-
-                        // Success
-                        App.auth.isAuthed = true;
-                        App.auth.showLogin(false);
-                        App.auth.showApp(true);
-                        // Initialize main app only after auth
-                        await App.init();
-                    } catch (e) {
-                        console.error('verifyPasscode error:', e);
-                        App.auth.setMsg(`驗證失敗：${e?.message || e}`, true);
-                    } finally {
-                        App.auth.setLoading(false);
-                    }
-                },
-
-                // 顯示連線/權限自檢狀態（不阻擋登入，但可快速判斷是否連得上/是否被 RLS 擋）
-                setStatusLines: (lines) => {
-                    const box = document.getElementById('authStatusLines');
-                    if (!box) return;
-                    box.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
-                },
-
-                selfCheck: async () => {
-                    const lines = [];
-                    // FingerprintJS
-                    try {
-                        const vid = await App.auth.ensureFingerprint();
-                        lines.push(`FingerprintJS：<span class="text-green-700 font-bold">OK</span> (visitorId: ${String(vid).slice(0, 8)}…)`);
-                    } catch (e) {
-                        lines.push(`FingerprintJS：<span class="text-red-700 font-bold">失敗</span>（${e?.message || e}）`);
-                    }
-
-                    // Supabase init
-                    try {
-                        await App.auth.ensureDb();
-                        lines.push(`Supabase：<span class="text-green-700 font-bold">OK</span>`);
-                    } catch (e) {
-                        lines.push(`Supabase：<span class="text-red-700 font-bold">失敗</span>（${e?.message || e}）`);
-                        App.auth.setStatusLines(lines);
-                        return;
-                    }
-
-                    // access_control permission probe
-                    try {
-                        const { data, error } = await App.db
-                            .from('access_control')
-                            .select('passcode')
-                            .limit(1);
-                        if (error) {
-                            const code = error?.code ? ` (${error.code})` : '';
-                            lines.push(`\`access_control\` 權限：<span class="text-red-700 font-bold">失敗</span>${code}（${error?.message || error}）`);
-                            lines.push(`<span class="text-slate-500">提示：若啟用 RLS，需允許 anon 角色對 \`access_control\` 進行 select/update。</span>`);
-                        } else {
-                            lines.push(`\`access_control\` 權限：<span class="text-green-700 font-bold">OK</span>（可讀取 ${Array.isArray(data) ? data.length : 0} 筆）`);
-                        }
-                    } catch (e) {
-                        lines.push(`\`access_control\` 權限：<span class="text-red-700 font-bold">失敗</span>（${e?.message || e}）`);
-                    }
-
-                    App.auth.setStatusLines(lines);
-                }
-            },
 
             init: async () => {
                 // 檢查 Supabase 庫是否已載入
@@ -3697,7 +3445,7 @@
             }
         };
 
-        document.addEventListener('DOMContentLoaded', App.auth.init);
+        document.addEventListener('DOMContentLoaded', App.init);
     </script>
 </body>
 </html>
