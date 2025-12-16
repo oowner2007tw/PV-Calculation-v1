@@ -1317,24 +1317,34 @@
                         <div><i class="fa-solid fa-bolt text-amber-500 mr-1"></i><span class="font-semibold">MPPT數量:</span> ${inv.num_mpp_trackers}組</div>
                         <div><i class="fa-solid fa-gauge text-blue-500 mr-1"></i><span class="font-semibold">MPPT電壓範圍:</span> ${inv.mppt_voltage_range_v ? (String(inv.mppt_voltage_range_v).includes('NaN') ? '資料錯誤' : inv.mppt_voltage_range_v) : 'N/A'}V</div>
                         <div><i class="fa-solid fa-plug text-green-500 mr-1"></i><span class="font-semibold">MPPT最大電流:</span> ${(() => {
-                            if (!inv.max_input_current_per_mppt_a) return 'N/A';
-                            // 處理不同格式的數值
-                            let value = inv.max_input_current_per_mppt_a;
-                            // 如果是數字，直接使用
-                            if (typeof value === 'number') {
-                                return value + 'A';
+                            const mpptCount = parseInt(inv.num_mpp_trackers || 0) || 0;
+                            const isM125HV = /m125hv/i.test(String(inv.model_name || '')) || /m125hv/i.test(String(inv.series || ''));
+                            const parseCurrent = (value, maxAllowed) => {
+                                if (value === null || value === undefined || value === '') return null;
+                                if (typeof value === 'number') return (!isNaN(value) && value > 0 && value <= maxAllowed) ? value : null;
+                                const s = String(value).trim();
+                                if (s.includes('999') || s.toLowerCase().includes('na') || s.toLowerCase().includes('n/a')) return null;
+                                const m = s.match(/^[\d.]+/);
+                                if (!m) return null;
+                                const num = parseFloat(m[0]);
+                                return (!isNaN(num) && num > 0 && num <= maxAllowed) ? num : null;
+                            };
+                            
+                            const totalCurrentField = inv.max_input_current_total_a || inv.max_input_current_total ||
+                                                     inv['Max Input Current Total A'] || inv['max_input_current_total_a'];
+                            const totalCurrent = parseCurrent(totalCurrentField, 1000);
+                            const perMppt = parseCurrent(inv.max_input_current_per_mppt_a, 100);
+                            
+                            let perMpptFinal = null;
+                            if (mpptCount <= 1) {
+                                perMpptFinal = perMppt !== null ? perMppt : totalCurrent;
+                            } else {
+                                if (!isM125HV && perMppt !== null) perMpptFinal = perMppt;
+                                else if (totalCurrent !== null) perMpptFinal = totalCurrent / mpptCount;
+                                else perMpptFinal = perMppt;
                             }
-                            // 如果是字串，提取第一個有效的數字（包含小數點）
-                            const str = String(value).trim();
-                            // 匹配數字（可能包含小數點），但排除多個連續的數字
-                            const numMatch = str.match(/^[\d.]+/);
-                            if (numMatch) {
-                                const num = parseFloat(numMatch[0]);
-                                if (!isNaN(num) && num > 0 && num < 1000) { // 合理性檢查
-                                    return num + 'A';
-                                }
-                            }
-                            return 'N/A';
+                            
+                            return perMpptFinal !== null ? `${perMpptFinal}A` : 'N/A';
                         })()}</div>
                         <div><i class="fa-solid fa-arrow-up text-red-500 mr-1"></i><span class="font-semibold">最大輸入電壓:</span> ${inv.max_input_voltage_v}V</div>
                     `;
@@ -2400,69 +2410,49 @@
                         }
                         
                         // 提取 MPPT 最大電流數值（處理不同格式）
-                        // 優先使用 Max Input Current Total A（總電流），如果沒有則使用每MPPT電流
-                        let maxCurrentPerMPPT = null; // 不使用預設值，如果沒有有效資料則為null
+                        // 定義：一般情況下「MPPT最大電流」指「每一個 MPPT 的最大電流」。
+                        // - 若 MPPT > 1：優先使用每 MPPT 欄位；僅在缺資料或特定機型（如 M125HV）時，才用「總電流 ÷ MPPT數」推回每 MPPT。
+                        // - 若 MPPT = 1：每 MPPT 最大電流 = 該 MPPT 最大電流（可直接用每 MPPT 欄位或總電流欄位）。
+                        let maxCurrentPerMPPT = null; // 若無有效資料則為 null
+                        const mpptCount = parseInt(inv.num_mpp_trackers || 0) || 0;
+                        const isM125HV = /m125hv/i.test(String(inv.model_name || '')) || /m125hv/i.test(String(inv.series || ''));
                         
-                        // 優先檢查總電流欄位（Max Input Current Total A）
-                        let totalCurrent = null;
-                        const totalCurrentField = inv.max_input_current_total_a || inv.max_input_current_total || 
+                        const parseCurrent = (value, maxAllowed) => {
+                            if (value === null || value === undefined || value === '') return null;
+                            if (typeof value === 'number') {
+                                if (!isNaN(value) && value > 0 && value <= maxAllowed) return value;
+                                return null;
+                            }
+                            const s = String(value).trim();
+                            if (s.includes('999') || s.toLowerCase().includes('na') || s.toLowerCase().includes('n/a')) return null;
+                            const m = s.match(/^[\d.]+/);
+                            if (!m) return null;
+                            const num = parseFloat(m[0]);
+                            if (!isNaN(num) && num > 0 && num <= maxAllowed) return num;
+                            return null;
+                        };
+                        
+                        // 候選欄位：總電流與每MPPT電流
+                        const totalCurrentField = inv.max_input_current_total_a || inv.max_input_current_total ||
                                                  inv['Max Input Current Total A'] || inv['max_input_current_total_a'];
+                        const totalCurrent = parseCurrent(totalCurrentField, 1000); // 總電流可能較大
+                        const perMpptCurrent = parseCurrent(inv.max_input_current_per_mppt_a, 100); // 每MPPT通常 <= 100A
                         
-                        if (totalCurrentField) {
-                            let value = totalCurrentField;
-                            // 如果是數字，直接使用
-                            if (typeof value === 'number') {
-                                if (!isNaN(value) && value > 0 && value <= 1000) { // 總電流可能較大
-                                    totalCurrent = value;
-                                }
+                        if (mpptCount <= 1) {
+                            // MPPT=1：每MPPT最大電流 = 該MPPT最大電流（per-mppt 欄位優先，其次總電流欄位）
+                            maxCurrentPerMPPT = perMpptCurrent !== null ? perMpptCurrent : (totalCurrent !== null ? totalCurrent : null);
+                        } else {
+                            // MPPT>1：一般優先 per-mppt 欄位；若是 M125HV 或 per-mppt 缺資料，才用總電流÷MPPT
+                            if (!isM125HV && perMpptCurrent !== null) {
+                                maxCurrentPerMPPT = perMpptCurrent;
+                            } else if (totalCurrent !== null) {
+                                maxCurrentPerMPPT = totalCurrent / mpptCount;
+                                console.log(`逆變器 ${inv.model_name} 使用總電流 ${totalCurrent}A ÷ ${mpptCount} MPPT = ${maxCurrentPerMPPT.toFixed(2)}A/MPPT`);
+                            } else if (perMpptCurrent !== null) {
+                                // 沒有總電流但有 per-mppt（即便是 M125HV 也退而求其次）
+                                maxCurrentPerMPPT = perMpptCurrent;
                             } else {
-                                // 如果是字串，提取第一個有效的數字
-                                const currentStr = String(value).trim();
-                                if (!currentStr.includes('999') && !currentStr.toLowerCase().includes('na') && !currentStr.toLowerCase().includes('n/a')) {
-                                    const numMatch = currentStr.match(/^[\d.]+/);
-                                    if (numMatch) {
-                                        const num = parseFloat(numMatch[0]);
-                                        if (!isNaN(num) && num > 0 && num <= 1000) {
-                                            totalCurrent = num;
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // 如果有總電流，除以MPPT數量得到每MPPT電流
-                            if (totalCurrent !== null && inv.num_mpp_trackers > 0) {
-                                maxCurrentPerMPPT = totalCurrent / inv.num_mpp_trackers;
-                                console.log(`逆變器 ${inv.model_name} 使用總電流 ${totalCurrent}A，除以 ${inv.num_mpp_trackers} 個MPPT = ${maxCurrentPerMPPT.toFixed(2)}A/MPPT`);
-                            }
-                        }
-                        
-                        // 如果沒有總電流，使用每MPPT電流欄位
-                        if (maxCurrentPerMPPT === null && inv.max_input_current_per_mppt_a) {
-                            let value = inv.max_input_current_per_mppt_a;
-                            // 如果是數字，直接使用
-                            if (typeof value === 'number') {
-                                if (!isNaN(value) && value > 0 && value <= 100) { // 合理性檢查：MPPT電流通常在100A以內
-                                    maxCurrentPerMPPT = value;
-                                } else {
-                                    console.warn(`逆變器 ${inv.model_name} 的 MPPT 最大電流值異常: ${value}A`);
-                                }
-                            } else {
-                                // 如果是字串，提取第一個有效的數字
-                                const currentStr = String(value).trim();
-                                // 排除明顯錯誤的值（如包含999等）
-                                if (currentStr.includes('999') || currentStr.toLowerCase().includes('na') || currentStr.toLowerCase().includes('n/a')) {
-                                    console.warn(`逆變器 ${inv.model_name} 的 MPPT 最大電流值可能錯誤: ${currentStr}`);
-                                } else {
-                                    const numMatch = currentStr.match(/^[\d.]+/);
-                                    if (numMatch) {
-                                        const num = parseFloat(numMatch[0]);
-                                        if (!isNaN(num) && num > 0 && num <= 100) { // 合理性檢查：MPPT電流通常在100A以內
-                                            maxCurrentPerMPPT = num;
-                                        } else {
-                                            console.warn(`逆變器 ${inv.model_name} 的 MPPT 最大電流值異常: ${num}A`);
-                                        }
-                                    }
-                                }
+                                maxCurrentPerMPPT = null;
                             }
                         }
                         
