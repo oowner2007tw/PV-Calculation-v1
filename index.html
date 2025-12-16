@@ -813,12 +813,6 @@
                     App.auth.showLogin(true);
                     App.auth.showApp(false);
 
-                    // Basic config guard
-                    if (!CONFIG.supabaseUrl || CONFIG.supabaseUrl === 'SUPABASE_URL' || !CONFIG.supabaseKey || CONFIG.supabaseKey === 'SUPABASE_ANON_KEY') {
-                        App.auth.setMsg('請先在程式中設定 SUPABASE_URL 與 SUPABASE_ANON_KEY（目前為 placeholder）', true);
-                        return;
-                    }
-
                     try {
                         await App.auth.ensureFingerprint();
                         await App.auth.ensureDb();
