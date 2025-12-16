@@ -3,11 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>太陽光電規劃系統 v5.5 (串列規劃版)</title>
+    <title>太陽光電規劃系統</title>
     
     <!-- 1. 載入外部函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- FingerprintJS v4 (IIFE build exposes window.FingerprintJS) -->
+    <script src="https://openfpcdn.io/fingerprintjs/v4/iife.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -140,7 +142,58 @@
 </head>
 <body class="p-3 md:p-6 min-h-screen">
 
-    <div class="max-w-[1600px] mx-auto bg-white rounded-2xl shadow-xl min-h-[calc(100vh-3rem)] flex flex-col border border-slate-200 overflow-hidden">
+    <!-- Device-bound Login -->
+    <div id="loginScreen" class="max-w-[640px] mx-auto bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+        <div class="px-6 py-5 border-b border-slate-100 bg-gradient-to-br from-emerald-600 via-sky-600 to-blue-700 text-white relative overflow-hidden">
+            <div class="absolute -top-10 -right-10 w-40 h-40 rounded-full bg-white/10 blur-2xl"></div>
+            <div class="absolute -bottom-14 -left-14 w-48 h-48 rounded-full bg-white/10 blur-2xl"></div>
+            <div class="flex items-center justify-start gap-3 w-full text-left">
+                <div class="bg-white/15 p-2 rounded-xl">
+                    <i class="fa-solid fa-solar-panel text-xl"></i>
+                </div>
+                <div class="text-lg font-bold">登入</div>
+            </div>
+        </div>
+        <div class="p-6 space-y-4 bg-gradient-to-b from-white to-slate-50">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div class="rounded-xl border border-emerald-100 bg-emerald-50/60 p-3">
+                    <div class="text-emerald-700 font-bold text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-leaf"></i><span>再生能源</span>
+                    </div>
+                </div>
+                <div class="rounded-xl border border-sky-100 bg-sky-50/60 p-3">
+                    <div class="text-sky-700 font-bold text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-sun"></i><span>太陽光電</span>
+                    </div>
+                </div>
+                <div class="rounded-xl border border-blue-100 bg-blue-50/60 p-3">
+                    <div class="text-blue-700 font-bold text-xs flex items-center gap-2">
+                        <i class="fa-solid fa-chart-line"></i><span>工程規劃</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="text-sm text-slate-600 leading-relaxed">
+                請輸入通行碼以進入系統。為確保授權安全，首次登入會綁定此裝置；之後僅允許同一裝置登入。
+            </div>
+            <form id="loginForm" class="space-y-3">
+                <div class="space-y-1">
+                    <label class="text-xs font-bold text-slate-500 uppercase">Passcode</label>
+                    <input id="passcodeInput" type="password" autocomplete="one-time-code"
+                           class="w-full border border-gray-300 rounded-lg p-3 bg-white focus:bg-white focus:ring-2 focus:ring-sky-500 outline-none transition font-mono"
+                           placeholder="例如：666" required>
+                </div>
+                <button id="loginBtn" type="submit"
+                        class="w-full bg-gradient-to-r from-emerald-600 via-sky-600 to-blue-700 hover:from-emerald-700 hover:via-sky-700 hover:to-blue-800 text-white font-bold py-3 rounded-lg transition shadow-md shadow-sky-200 disabled:opacity-60 disabled:cursor-not-allowed">
+                    驗證並登入
+                </button>
+                <div id="loginMsg" class="text-sm text-red-600 font-semibold hidden"></div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App (hidden until login success) -->
+    <div id="appRoot" class="max-w-[1600px] mx-auto bg-white rounded-2xl shadow-xl min-h-[calc(100vh-3rem)] flex flex-col border border-slate-200 overflow-hidden hidden">
         
         <!-- Header -->
         <header class="px-6 py-4 border-b border-gray-100 flex flex-col md:flex-row justify-between items-center bg-white sticky top-0 z-40 shadow-sm">
@@ -149,7 +202,7 @@
                     <i class="fa-solid fa-solar-panel text-2xl"></i>
                 </div>
                 <div>
-                    <h1 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">太陽光電全方位規劃系統 <span class="text-blue-600">v5.5</span></h1>
+                    <h1 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">太陽光電全方位規劃系統</h1>
                     <p class="text-xs text-slate-500 font-medium mt-0.5">串列規劃與驗證 | Engineering Design Tool</p>
                 </div>
             </div>
@@ -186,8 +239,8 @@
                                 系統基礎參數
                             </h3>
                             <div class="space-y-4">
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div class="space-y-1">
+                                <div class="grid grid-cols-12 gap-4 items-start">
+                                    <div class="space-y-1 col-span-12 md:col-span-4">
                                         <label class="text-xs font-bold text-slate-500 uppercase">電壓 (V)</label>
                                         <select id="gridVoltage" class="inp-param w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition">
                                             <option value="380" selected>380V (3Φ)</option>
@@ -197,9 +250,15 @@
                                             <option value="480">480V (3Φ)</option>
                                         </select>
                                     </div>
-                                    <div class="space-y-1">
-                                        <label class="text-xs font-bold text-slate-500 uppercase">屋頂數量 (Roofs)</label>
-                                        <input type="number" id="roofCount" value="1" min="1" class="inp-param w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition">
+                                    <div class="space-y-1 col-span-12 md:col-span-8">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-xs font-bold text-slate-500 uppercase">屋頂清單 (Roofs)</label>
+                                            <button type="button" id="addRoofBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition border border-slate-200 font-bold">
+                                                <i class="fa-solid fa-plus mr-1"></i>新增屋頂
+                                            </button>
+                                        </div>
+                                        <div id="roofList" class="space-y-2"></div>
+                                        <div class="text-[11px] text-slate-500 pl-1">可新增/刪除屋頂；每一屋頂可輸入規劃片數（系統會自動加總成「規劃總片數」）</div>
                                     </div>
                                 </div>
                                 
@@ -213,9 +272,9 @@
 
                                 <div class="grid grid-cols-2 gap-4">
                                     <div class="space-y-1">
-                                        <label class="text-xs font-bold text-slate-500 uppercase">規劃片數 (Panels)</label>
+                                        <label class="text-xs font-bold text-slate-500 uppercase">規劃總片數 (Panels)</label>
                                         <div class="relative">
-                                            <input type="number" id="plannedPanels" class="inp-param w-full border border-gray-300 rounded-lg p-2.5 text-blue-700 font-bold" placeholder="0" value="0" min="0">
+                                            <input type="number" id="plannedPanels" class="inp-param w-full border border-gray-300 rounded-lg p-2.5 text-blue-700 font-bold bg-slate-50" placeholder="0" value="0" min="0" readonly>
                                             <span class="absolute right-4 top-3.5 text-gray-400 text-sm font-bold">片</span>
                                         </div>
                                         <div id="calculatedCapacity" class="text-xs text-gray-500 mt-1 pl-1">
@@ -419,6 +478,37 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 接地 / 斷路器標準 -->
+                    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">接地種類 (Ground Types)</h4>
+                            <div class="overflow-auto flex-grow text-xs border rounded">
+                                <table class="w-full text-center">
+                                    <thead class="bg-gray-50 sticky top-0" id="groundTypeTableHeader"></thead>
+                                    <tbody id="groundTypeTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">接地導線線徑 (Grounding Conductor Wire Sizing)</h4>
+                            <div class="overflow-auto flex-grow text-xs border rounded">
+                                <table class="w-full text-center">
+                                    <thead class="bg-gray-50 sticky top-0" id="groundingConductorWireSizingTableHeader"></thead>
+                                    <tbody id="groundingConductorWireSizingTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">斷路器標準 (Breaker Standards)</h4>
+                            <div class="overflow-auto flex-grow text-xs border rounded">
+                                <table class="w-full text-center">
+                                    <thead class="bg-gray-50 sticky top-0" id="breakerStdTableHeader"></thead>
+                                    <tbody id="breakerStdTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -590,7 +680,7 @@
                                     </li>
                                     <li class="flex items-start">
                                         <i class="fa-solid fa-arrow-right text-indigo-600 mr-2 mt-1"></i>
-                                        <span><strong>循環分配：</strong>系統會根據使用者輸入的「屋頂數量」循環分配 MPPT 到不同屋頂</span>
+                                        <span><strong>循環分配：</strong>系統會根據使用者設定的「屋頂清單」循環分配 MPPT 到不同屋頂</span>
                                     </li>
                                 </ul>
                             </div>
@@ -675,6 +765,8 @@
 
     <script>
         const CONFIG = {
+            // Supabase project settings
+            // 若需更換環境，將下列 URL / ANON KEY 改成你的專案設定即可。
             supabaseUrl: 'https://ntlmothsjvhdvcykcvex.supabase.co',
             supabaseKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im50bG1vdGhzanZoZHZjeWtjdmV4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjU1NzEwMzIsImV4cCI6MjA4MTE0NzAzMn0.Fk2zZB7myLQnwx4Hiw678ggQYZ8ZaZDAW7UHH8eobO0',
             storageUrl: 'https://ntlmothsjvhdvcykcvex.supabase.co/storage/v1/object/public/inverters',
@@ -718,8 +810,225 @@
 
         const App = {
             db: null,
-            cache: { inverters: [], modules: [], impedance: [], ampPVC: [], ampMetal60: [], ampMetal75: [], ampMetal90: [], conduit: [], conduitFlexNonMetal: [], conduitThickMetal: [], conduitThinMetal: [], inverterImages: [] },
+            cache: { 
+                inverters: [], modules: [], impedance: [], 
+                ampPVC: [], ampMetal60: [], ampMetal75: [], ampMetal90: [], 
+                conduit: [], conduitFlexNonMetal: [], conduitThickMetal: [], conduitThinMetal: [], 
+                inverterImages: [],
+                groundTypes: [], groundingConductorWireSizing: [], breakerStandards: []
+            },
             reportData: { params: {}, vd: [], sc: [], planning: [] },
+            roofs: [],
+            auth: {
+                visitorId: null,
+                isReady: false,
+                fpLoadPromise: null,
+
+                init: async () => {
+                    App.auth.showApp(false);
+                    App.auth.showLogin(true);
+                    App.auth.bindForm();
+
+                    try {
+                        await App.auth.ensureDb();
+                        await App.auth.ensureFingerprint();
+                        App.auth.isReady = true;
+                        App.auth.setMsg('', false);
+                    } catch (e) {
+                        console.error('Auth init failed:', e);
+                        App.auth.setMsg(`初始化失敗：${e?.message || e}`, true);
+                    }
+                },
+
+                bindForm: () => {
+                    const form = document.getElementById('loginForm');
+                    if (!form || form.hasAttribute('data-bound')) return;
+                    form.addEventListener('submit', (e) => {
+                        e.preventDefault();
+                        App.auth.verify();
+                    });
+                    form.setAttribute('data-bound', 'true');
+                },
+
+                ensureDb: async () => {
+                    if (App.db) return App.db;
+                    if (typeof supabase === 'undefined' || !supabase?.createClient) {
+                        throw new Error('Supabase SDK 未載入（請檢查 CDN）');
+                    }
+                    const { createClient } = supabase;
+                    App.db = createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
+                        auth: { persistSession: false },
+                        db: { schema: 'public' },
+                        global: { headers: { apikey: CONFIG.supabaseKey } }
+                    });
+                    return App.db;
+                },
+
+                ensureFingerprint: async () => {
+                    if (App.auth.visitorId) return App.auth.visitorId;
+                    await App.auth.ensureFingerprintLibReady();
+                    const fp = await FingerprintJS.load(); // 確保先完成 load() 檢查
+                    const res = await fp.get();
+                    App.auth.visitorId = res?.visitorId || null;
+                    if (!App.auth.visitorId) throw new Error('無法取得設備指紋 visitorId');
+                    return App.auth.visitorId;
+                },
+
+                // 確保 FingerprintJS 已載入並可用（含 CDN 載入較慢時的等待）
+                ensureFingerprintLibReady: async () => {
+                    if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) return;
+                    if (App.auth.fpLoadPromise) return App.auth.fpLoadPromise;
+
+                    App.auth.fpLoadPromise = new Promise((resolve, reject) => {
+                        // 若 head 內 script 尚未載入完成，做輪詢等待
+                        const start = Date.now();
+                        const timeoutMs = 6000;
+                        const tick = () => {
+                            if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) {
+                                resolve();
+                                return;
+                            }
+                            if (Date.now() - start > timeoutMs) {
+                                // 若 head script 因網路/CSP/阻擋未生效：依序嘗試多個 CDN
+                                const tryLoad = (src) => new Promise((res, rej) => {
+                                    const s = document.createElement('script');
+                                    s.src = src;
+                                    s.async = true;
+                                    s.onload = () => res(true);
+                                    s.onerror = () => rej(new Error(`FingerprintJS CDN 載入失敗：${src}`));
+                                    document.head.appendChild(s);
+                                });
+
+                                (async () => {
+                                    try {
+                                        // 1) OpenFP CDN IIFE
+                                        await tryLoad('https://openfpcdn.io/fingerprintjs/v4/iife.js');
+                                        if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) { resolve(); return; }
+                                    } catch (_) {}
+                                    try {
+                                        // 2) jsDelivr 官方套件（IIFE/UMD 也會掛到 window.FingerprintJS）
+                                        await tryLoad('https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js');
+                                        if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) { resolve(); return; }
+                                    } catch (e) {
+                                        reject(e);
+                                        return;
+                                    }
+                                    reject(new Error('FingerprintJS 已載入但未提供 FingerprintJS.load（可能被 CSP 攔截或 CDN 回應異常）'));
+                                })();
+                                return;
+                            }
+                            setTimeout(tick, 100);
+                        };
+                        tick();
+                    });
+
+                    return App.auth.fpLoadPromise;
+                },
+
+                setLoading: (loading) => {
+                    const btn = document.getElementById('loginBtn');
+                    const inp = document.getElementById('passcodeInput');
+                    if (btn) btn.disabled = !!loading;
+                    if (inp) inp.disabled = !!loading;
+                    if (btn) btn.innerHTML = loading ? '<i class="fa-solid fa-spinner fa-spin mr-2"></i>驗證中...' : '驗證並登入';
+                },
+
+                setMsg: (msg, isError) => {
+                    const el = document.getElementById('loginMsg');
+                    if (!el) return;
+                    if (!msg) {
+                        el.classList.add('hidden');
+                        el.textContent = '';
+                        return;
+                    }
+                    el.textContent = msg;
+                    el.classList.remove('hidden');
+                    el.classList.toggle('text-red-600', !!isError);
+                    el.classList.toggle('text-green-600', !isError);
+                },
+
+                showLogin: (show) => {
+                    const el = document.getElementById('loginScreen');
+                    if (!el) return;
+                    el.classList.toggle('hidden', !show);
+                },
+
+                showApp: (show) => {
+                    const el = document.getElementById('appRoot');
+                    if (!el) return;
+                    el.classList.toggle('hidden', !show);
+                },
+
+                // verifyAccess：先等 FingerprintJS 就緒，再做 Supabase 查詢
+                verifyAccess: async () => {
+                    const passcode = String(document.getElementById('passcodeInput')?.value || '').trim();
+                    if (!passcode) {
+                        App.auth.setMsg('請輸入通行碼', true);
+                        return;
+                    }
+
+                    App.auth.setLoading(true);
+                    App.auth.setMsg('', false);
+
+                    try {
+                        // 先確保 FingerprintJS 可用並取得設備指紋，再進行 Supabase 查詢
+                        const visitorId = await App.auth.ensureFingerprint();
+                        await App.auth.ensureDb();
+
+                        // 依 passcode 讀取 access_control
+                        const { data, error } = await App.db
+                            .from('access_control')
+                            .select('passcode,bound_device_id,is_used')
+                            .eq('passcode', passcode)
+                            .maybeSingle();
+
+                        if (error) {
+                            const code = error?.code ? ` (${error.code})` : '';
+                            throw new Error(`查詢失敗${code}：${error?.message || error}`);
+                        }
+                        if (!data) {
+                            App.auth.setMsg('通行碼不存在或輸入錯誤', true);
+                            return;
+                        }
+
+                        const isUsed = !!data.is_used;
+                        const bound = String(data.bound_device_id || '');
+
+                        if (!isUsed) {
+                            // 首次登入：寫入 bound_device_id 並設定 is_used
+                            const { error: upErr } = await App.db
+                                .from('access_control')
+                                .update({ bound_device_id: visitorId, is_used: true })
+                                .eq('passcode', passcode)
+                                .eq('is_used', false);
+
+                            if (upErr) {
+                                const code = upErr?.code ? ` (${upErr.code})` : '';
+                                throw new Error(`更新失敗${code}：${upErr?.message || upErr}`);
+                            }
+                        } else {
+                            // 回訪：比對 bound_device_id
+                            if (!bound || bound !== visitorId) {
+                                App.auth.setMsg('此碼已在其他裝置綁定', true);
+                                return;
+                            }
+                        }
+
+                        // 登入成功：顯示主畫面並初始化系統
+                        App.auth.showLogin(false);
+                        App.auth.showApp(true);
+                        await App.init();
+                    } catch (e) {
+                        console.error('Login verify error:', e);
+                        App.auth.setMsg(`登入失敗：${e?.message || e}`, true);
+                    } finally {
+                        App.auth.setLoading(false);
+                    }
+                },
+
+                // 相容舊呼叫點
+                verify: async () => App.auth.verifyAccess()
+            },
 
             init: async () => {
                 // 檢查 Supabase 庫是否已載入
@@ -737,8 +1046,10 @@
                 }
                 
                 try {
-                    const { createClient } = supabase;
-                    App.db = createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
+                    // 若尚未建立 client，這裡建立
+                    if (!App.db) {
+                        const { createClient } = supabase;
+                        App.db = createClient(CONFIG.supabaseUrl, CONFIG.supabaseKey, {
                         auth: {
                             persistSession: false
                         },
@@ -750,7 +1061,8 @@
                                 'apikey': CONFIG.supabaseKey
                             }
                         }
-                    });
+                        });
+                    }
                     await App.data.fetchAll();
                 } catch (err) {
                     console.error('初始化資料庫連接失敗:', err);
@@ -891,6 +1203,38 @@
                             console.warn('金屬薄管資料表不存在或查詢失敗，使用空資料:', err);
                         }
                         
+                        // --- 追加：接地/斷路器標準（可選資料表，不影響主流程） ---
+                        const fetchOptionalByCandidates = async (candidates, label) => {
+                            for (const table of candidates) {
+                                try {
+                                    const r = await App.db.from(table).select('*');
+                                    if (!r?.error) {
+                                        console.log(`${label} 載入成功: ${table} (${(r.data || []).length}筆)`);
+                                        return r;
+                                    }
+                                    console.warn(`${label} 查詢失敗(${table}):`, r.error);
+                                } catch (e) {
+                                    console.warn(`${label} 資料表不存在或查詢失敗(${table}):`, e);
+                                }
+                            }
+                            return { data: [] };
+                        };
+                        
+                        const groundTypes = await fetchOptionalByCandidates(
+                            ['grounding_types', 'ground_types', 'ground_type', 'earthing_types', 'earthing_type', '接地種類'],
+                            '接地種類'
+                        );
+                        const groundingConductorWireSizing = await fetchOptionalByCandidates(
+                            // 接地導線線徑
+                            ['grounding_wire_sizing', 'grounding_conductor_wire_sizing', 'grounding_conductor_sizing', 'grounding_wire_sizes', 'ground_wire_sizes', 'earthing_wire_sizes', '接地導線線徑'],
+                            '接地導線線徑'
+                        );
+                        const breakerStandards = await fetchOptionalByCandidates(
+                            // 指定：對應到 Supabase Breaker Standards table
+                            ['Breaker Standards', 'breaker_standards', 'breaker_standard', 'breaker_standard_table', 'breakerStandards', 'breaker', 'breaker_specs'],
+                            '斷路器標準'
+                        );
+                        
                         App.cache = { 
                             inverters: inv.data||[], 
                             modules: mod.data||[], 
@@ -903,7 +1247,10 @@
                             conduitFlexNonMetal: pipeFlexNonMetal.data||[], 
                             conduitThickMetal: pipeThickMetal.data||[], 
                             conduitThinMetal: pipeThinMetal.data||[], 
-                            inverterImages: img.data||[] 
+                            inverterImages: img.data||[],
+                            groundTypes: groundTypes.data || [],
+                            groundingConductorWireSizing: groundingConductorWireSizing.data || [],
+                            breakerStandards: breakerStandards.data || []
                         };
                         
                         // 檢查是否有關鍵資料
@@ -1029,7 +1376,137 @@
                             });
                         });
                     });
+                    // 屋頂清單 UI（在 plannedPanels 的監聽器建立後再初始化，確保同步時可更新容量與計算）
+                    App.ui.initRoofs();
                     observer.observe(document.body, { childList: true, subtree: true });
+                },
+
+                // --- 屋頂清單 (可新增/刪除 + 每屋頂規劃片數) ---
+                initRoofs: () => {
+                    // 初始化資料（若尚未有 roofs）
+                    if (!Array.isArray(App.roofs) || App.roofs.length === 0) {
+                        App.roofs = [{ id: Date.now(), name: '屋頂 1', panels: 0 }];
+                    }
+
+                    // 綁定新增按鈕（只綁一次）
+                    const addBtn = document.getElementById('addRoofBtn');
+                    if (addBtn && !addBtn.hasAttribute('data-listener-added')) {
+                        addBtn.addEventListener('click', () => App.ui.addRoof());
+                        addBtn.setAttribute('data-listener-added', 'true');
+                    }
+
+                    // 綁定清單事件（事件委派，只綁一次）
+                    const list = document.getElementById('roofList');
+                    if (list && !list.hasAttribute('data-listener-added')) {
+                        list.addEventListener('input', (e) => {
+                            const t = e.target;
+                            if (!t || !t.getAttribute) return;
+
+                            // 更新屋頂名稱
+                            const nameId = t.getAttribute('data-roof-name');
+                            if (nameId) {
+                                const r = (App.roofs || []).find(x => String(x.id) === String(nameId));
+                                if (r) r.name = String(t.value || '').trim() || r.name || '屋頂';
+                                // 名稱只影響顯示，仍觸發一次計算刷新
+                                App.calc.runDebounced();
+                                return;
+                            }
+
+                            // 更新屋頂片數並同步到總片數
+                            const panelsId = t.getAttribute('data-roof-panels');
+                            if (panelsId) {
+                                const r = (App.roofs || []).find(x => String(x.id) === String(panelsId));
+                                if (r) {
+                                    let v = parseInt(t.value || 0);
+                                    if (isNaN(v) || v < 0) v = 0;
+                                    r.panels = v;
+                                }
+                                App.ui.syncPlannedPanelsFromRoofs();
+                                return;
+                            }
+                        });
+
+                        list.addEventListener('click', (e) => {
+                            const btn = e.target?.closest?.('button[data-roof-del]');
+                            if (btn) {
+                                const id = btn.getAttribute('data-roof-del');
+                                App.ui.removeRoof(id);
+                            }
+                        });
+
+                        list.setAttribute('data-listener-added', 'true');
+                    }
+
+                    App.ui.renderRoofs();
+                    App.ui.syncPlannedPanelsFromRoofs();
+                },
+
+                renderRoofs: () => {
+                    const list = document.getElementById('roofList');
+                    if (!list) return;
+
+                    if (!Array.isArray(App.roofs) || App.roofs.length === 0) {
+                        App.roofs = [{ id: Date.now(), name: '屋頂 1', panels: 0 }];
+                    }
+
+                    const esc = (s) => String(s ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+
+                    list.innerHTML = (App.roofs || []).map((r, idx) => {
+                        const roofName = (r && r.name) ? String(r.name) : `屋頂 ${idx + 1}`;
+                        const roofPanels = (r && typeof r.panels !== 'undefined') ? r.panels : 0;
+                        const canDelete = (App.roofs || []).length > 1;
+                        return `
+                            <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-2 shadow-sm">
+                                <div class="text-xs font-bold text-slate-600 w-14 flex-shrink-0 text-center bg-slate-100 rounded py-1">屋頂</div>
+                                <input type="text" class="inp-param flex-grow border border-gray-200 rounded-md px-2 py-1.5 text-xs bg-gray-50 focus:bg-white" value="${esc(roofName)}" data-roof-name="${r.id}" placeholder="屋頂名稱">
+                                <div class="flex items-center gap-1 flex-shrink-0">
+                                    <input type="number" min="0" class="inp-param w-24 border border-gray-200 rounded-md px-2 py-1.5 text-xs text-blue-700 font-bold bg-gray-50 focus:bg-white text-right" value="${roofPanels}" data-roof-panels="${r.id}">
+                                    <span class="text-xs text-gray-400 font-bold">片</span>
+                                </div>
+                                <button type="button" class="${canDelete ? 'text-red-400 hover:text-red-600' : 'text-gray-200 cursor-not-allowed'} px-2" ${canDelete ? `data-roof-del="${r.id}"` : 'disabled'}>
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        `;
+                    }).join('');
+                },
+
+                addRoof: () => {
+                    if (!Array.isArray(App.roofs)) App.roofs = [];
+                    const nextIdx = App.roofs.length + 1;
+                    const id = Date.now() + Math.floor(Math.random() * 1000);
+                    App.roofs.push({ id, name: `屋頂 ${nextIdx}`, panels: 0 });
+                    App.ui.renderRoofs();
+                    App.ui.syncPlannedPanelsFromRoofs();
+                },
+
+                removeRoof: (id) => {
+                    if (!Array.isArray(App.roofs)) App.roofs = [{ id: Date.now(), name: '屋頂 1', panels: 0 }];
+                    if (App.roofs.length <= 1) return; // 至少保留 1 個
+                    App.roofs = App.roofs.filter(r => String(r.id) !== String(id));
+                    App.ui.renderRoofs();
+                    App.ui.syncPlannedPanelsFromRoofs();
+                },
+
+                syncPlannedPanelsFromRoofs: () => {
+                    const panelsInput = document.getElementById('plannedPanels');
+                    if (!panelsInput) return;
+                    const total = (Array.isArray(App.roofs) ? App.roofs : []).reduce((sum, r) => {
+                        const v = parseInt(r?.panels || 0);
+                        return sum + (isNaN(v) ? 0 : v);
+                    }, 0);
+                    panelsInput.value = String(total);
+                    // 觸發既有監聽（容量顯示 & 自動計算）
+                    panelsInput.dispatchEvent(new Event('input', { bubbles: true }));
+                },
+
+                getRoofList: () => {
+                    if (Array.isArray(App.roofs) && App.roofs.length > 0) return App.roofs;
+                    return [{ id: 1, name: '屋頂 1', panels: parseInt(document.getElementById('plannedPanels')?.value || 0) || 0 }];
                 },
                 populateSelects: () => {
                     // Cable
@@ -1108,24 +1585,34 @@
                         <div><i class="fa-solid fa-bolt text-amber-500 mr-1"></i><span class="font-semibold">MPPT數量:</span> ${inv.num_mpp_trackers}組</div>
                         <div><i class="fa-solid fa-gauge text-blue-500 mr-1"></i><span class="font-semibold">MPPT電壓範圍:</span> ${inv.mppt_voltage_range_v ? (String(inv.mppt_voltage_range_v).includes('NaN') ? '資料錯誤' : inv.mppt_voltage_range_v) : 'N/A'}V</div>
                         <div><i class="fa-solid fa-plug text-green-500 mr-1"></i><span class="font-semibold">MPPT最大電流:</span> ${(() => {
-                            if (!inv.max_input_current_per_mppt_a) return 'N/A';
-                            // 處理不同格式的數值
-                            let value = inv.max_input_current_per_mppt_a;
-                            // 如果是數字，直接使用
-                            if (typeof value === 'number') {
-                                return value + 'A';
+                            const mpptCount = parseInt(inv.num_mpp_trackers || 0) || 0;
+                            const isM125HV = /m125hv/i.test(String(inv.model_name || '')) || /m125hv/i.test(String(inv.series || ''));
+                            const parseCurrent = (value, maxAllowed) => {
+                                if (value === null || value === undefined || value === '') return null;
+                                if (typeof value === 'number') return (!isNaN(value) && value > 0 && value <= maxAllowed) ? value : null;
+                                const s = String(value).trim();
+                                if (s.includes('999') || s.toLowerCase().includes('na') || s.toLowerCase().includes('n/a')) return null;
+                                const m = s.match(/^[\d.]+/);
+                                if (!m) return null;
+                                const num = parseFloat(m[0]);
+                                return (!isNaN(num) && num > 0 && num <= maxAllowed) ? num : null;
+                            };
+                            
+                            const totalCurrentField = inv.max_input_current_total_a || inv.max_input_current_total ||
+                                                     inv['Max Input Current Total A'] || inv['max_input_current_total_a'];
+                            const totalCurrent = parseCurrent(totalCurrentField, 1000);
+                            const perMppt = parseCurrent(inv.max_input_current_per_mppt_a, 100);
+                            
+                            let perMpptFinal = null;
+                            if (mpptCount <= 1) {
+                                perMpptFinal = perMppt !== null ? perMppt : totalCurrent;
+                            } else {
+                                if (!isM125HV && perMppt !== null) perMpptFinal = perMppt;
+                                else if (totalCurrent !== null) perMpptFinal = totalCurrent / mpptCount;
+                                else perMpptFinal = perMppt;
                             }
-                            // 如果是字串，提取第一個有效的數字（包含小數點）
-                            const str = String(value).trim();
-                            // 匹配數字（可能包含小數點），但排除多個連續的數字
-                            const numMatch = str.match(/^[\d.]+/);
-                            if (numMatch) {
-                                const num = parseFloat(numMatch[0]);
-                                if (!isNaN(num) && num > 0 && num < 1000) { // 合理性檢查
-                                    return num + 'A';
-                                }
-                            }
-                            return 'N/A';
+                            
+                            return perMpptFinal !== null ? `${perMpptFinal}A` : 'N/A';
                         })()}</div>
                         <div><i class="fa-solid fa-arrow-up text-red-500 mr-1"></i><span class="font-semibold">最大輸入電壓:</span> ${inv.max_input_voltage_v}V</div>
                     `;
@@ -1311,6 +1798,43 @@
                            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-gray-400 p-4">資料載入中...</td></tr>';
                        }
                    }
+
+                   // 通用表格渲染（用於接地 / breaker standard）
+                   const renderGenericTable = (data, headerId, bodyId) => {
+                       const thead = document.getElementById(headerId);
+                       const tbody = document.getElementById(bodyId);
+                       if (!thead || !tbody) return;
+                       
+                       if (!Array.isArray(data) || data.length === 0) {
+                           thead.innerHTML = '<tr><th class="p-2">資料</th></tr>';
+                           tbody.innerHTML = '<tr><td class="text-center text-gray-400 p-4">資料載入中或無資料...</td></tr>';
+                           return;
+                       }
+                       
+                       const exclude = new Set(['id', 'created_at', 'updated_at', 'uuid']);
+                       const cols = Object.keys(data[0] || {}).filter(k => !exclude.has(k));
+                       const safeCols = cols.length ? cols : Object.keys(data[0] || {});
+                       
+                       const label = (k) => String(k).replace(/_/g, ' ');
+                       thead.innerHTML = `<tr>${safeCols.map(c => `<th class="p-2 border-b">${label(c)}</th>`).join('')}</tr>`;
+                       
+                       const esc = (v) => String(v ?? '')
+                           .replace(/&/g, '&amp;')
+                           .replace(/</g, '&lt;')
+                           .replace(/>/g, '&gt;')
+                           .replace(/"/g, '&quot;');
+                       
+                       tbody.innerHTML = data.map(row => {
+                           return `<tr class="hover:bg-blue-50 transition">${safeCols.map(c => {
+                               const v = row?.[c];
+                               return `<td class="p-2 border-b">${v === null || v === undefined || v === '' ? '-' : esc(v)}</td>`;
+                           }).join('')}</tr>`;
+                       }).join('');
+                   };
+                   
+                   renderGenericTable(App.cache.groundTypes, 'groundTypeTableHeader', 'groundTypeTableBody');
+                   renderGenericTable(App.cache.groundingConductorWireSizing, 'groundingConductorWireSizingTableHeader', 'groundingConductorWireSizingTableBody');
+                   renderGenericTable(App.cache.breakerStandards, 'breakerStdTableHeader', 'breakerStdTableBody');
                    
                    if(document.getElementById('inverterTableBody')) document.getElementById('inverterTableBody').innerHTML = App.cache.inverters.map((i,x)=>`<tr class="cursor-pointer border-b hover:bg-blue-50 transition" onclick="App.ui.openDetail('inverter',${x})"><td class="p-3 text-blue-600 font-bold">${i.model_name}</td><td class="p-3">${i.rated_output_power_kw}</td><td class="p-3">${i.max_input_voltage_v}</td><td class="p-3">${i.num_mpp_trackers}</td><td class="p-3">${i.max_efficiency_percent}%</td><td class="p-3 text-center"><i class="fa-solid fa-info-circle text-gray-400"></i></td></tr>`).join('');
                    if(document.getElementById('moduleTableBody')) document.getElementById('moduleTableBody').innerHTML = App.cache.modules.map((m,x)=>`<tr class="cursor-pointer border-b hover:bg-blue-50 transition" onclick="App.ui.openDetail('module',${x})"><td class="p-3">${m.manufacturer}</td><td class="p-3 font-bold text-blue-600">${m.model_number}</td><td class="p-3">${m.p_max}</td><td class="p-3">${m.v_oc}</td><td class="p-3">${m.i_sc}</td><td class="p-3 text-center"><i class="fa-solid fa-info-circle text-gray-400"></i></td></tr>`).join('');
@@ -1467,8 +1991,11 @@
                     if (P_kW > 0 && V_line > 0) {
                         const PF = 0.9; // 功率因數
                         const sinPhi = Math.sqrt(1 - PF * PF);
-                        const K_phase = is3Ph ? 1.732 : 1.0; // 三相係數或單相係數
-                        const I_b = (P_kW * 1000) / (K_phase * V_line);
+                        // 電流計算係數：三相 √3；單相 1
+                        const K_current = is3Ph ? 1.732 : 1.0;
+                        // 電壓降係數：三相 √3；單相 2（往返導線）
+                        const K_vd = is3Ph ? 1.732 : 2.0;
+                        const I_b = (P_kW * 1000) / (K_current * V_line);
                         
                         // 儲存到 reportData
                         const phaseType = is3Ph ? '三相系統' : '單相系統';
@@ -1527,12 +2054,14 @@
                                 const R = cable1.r_ohm || cable1.resistance_ohm_per_km || 0;
                                 const X = cable1.x_ohm || cable1.reactance_ohm_per_km || 0;
                                 const L_km = len1 / 1000;
-                                const Vd1 = K_phase * I_b * (R * PF + X * sinPhi) * L_km;
+                                const Vd1 = K_vd * I_b * (R * PF + X * sinPhi) * L_km;
                                 const Vd1_pct = (Vd1 / V_line) * 100;
                                 totalDrop += Vd1;
                                 
-                                const vdFormula = is3Ph ? 'ΔV = √3 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L' : 'ΔV = I<sub>b</sub> × (R·cosθ + X·sinθ) × L';
-                                const vdCalc = is3Ph ? `1.732 × ${I_b.toFixed(2)}` : `${I_b.toFixed(2)}`;
+                                const vdFormula = is3Ph
+                                    ? 'ΔV = √3 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L'
+                                    : 'ΔV = 2 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L';
+                                const vdCalc = is3Ph ? `1.732 × ${I_b.toFixed(2)}` : `2 × ${I_b.toFixed(2)}`;
                                 
                                 App.reportData.vd.push({
                                     title: `${segmentNum}. 責任分界點線路 (Service Point Cable)`,
@@ -1560,15 +2089,20 @@
                                 const R = cable2.r_ohm || cable2.resistance_ohm_per_km || 0;
                                 const X = cable2.x_ohm || cable2.reactance_ohm_per_km || 0;
                                 const L_km = len2 / 1000;
-                                const Vd2 = K_phase * I_b * (R * PF + X * sinPhi) * L_km;
+                                const Vd2 = K_vd * I_b * (R * PF + X * sinPhi) * L_km;
                                 const Vd2_pct = (Vd2 / V_line) * 100;
                                 totalDrop += Vd2;
+                                
+                                const vd2Formula = is3Ph
+                                    ? 'ΔV = √3 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L'
+                                    : 'ΔV = 2 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L';
+                                const vd2Calc = is3Ph ? `1.732 × ${I_b.toFixed(2)}` : `2 × ${I_b.toFixed(2)}`;
                                 
                                 App.reportData.vd.push({
                                     title: `${segmentNum}. 幹線迴路 (Main Feeder)`,
                                     params: `線徑: ${cable2.wire_size_label || 'N/A'} (${cable2.total_area_mm2 || 'N/A'}mm²), R = ${R} Ω/km, X = ${X} Ω/km, L = ${len2}m (${L_km}km)`,
-                                    formula: '公式: ΔV = √3 × I_b × (R·cosθ + X·sinθ) × L',
-                                    process: `計算過程: ΔV = 1.732 × ${I_b.toFixed(2)} × (${R}×${PF} + ${X}×${sinPhi.toFixed(3)}) × ${L_km}`,
+                                    formula: `公式: ${vd2Formula}`,
+                                    process: `計算過程: ΔV = ${vd2Calc} × (${R}×${PF} + ${X}×${sinPhi.toFixed(3)}) × ${L_km}`,
                                     result: `結果: ΔV₂ = ${Vd2.toFixed(2)} V (${Vd2_pct.toFixed(2)}%)`
                                 });
                                 
@@ -1576,8 +2110,8 @@
                                     <div class="calc-block">
                                         <span class="calc-title">${segmentNum}. 幹線迴路 (Main Feeder)</span>
                                         <span class="calc-param">線徑: ${cable2.wire_size_label || 'N/A'} (${cable2.total_area_mm2 || 'N/A'}mm²), R = ${R} Ω/km, X = ${X} Ω/km, L = ${len2}m (${L_km}km)</span>
-                                        <span class="calc-formula">公式: ΔV = √3 × I_b × (R·cosθ + X·sinθ) × L</span>
-                                        <span class="calc-process">計算過程: ΔV = 1.732 × ${I_b.toFixed(2)} × (${R}×${PF} + ${X}×${sinPhi.toFixed(3)}) × ${L_km}</span>
+                                        <span class="calc-formula">公式: ${vd2Formula}</span>
+                                        <span class="calc-process">計算過程: ΔV = ${vd2Calc} × (${R}×${PF} + ${X}×${sinPhi.toFixed(3)}) × ${L_km}</span>
                                         <span class="calc-result">結果: ΔV₂ = ${Vd2.toFixed(2)} V (${Vd2_pct.toFixed(2)}%)</span>
                                 </div>`;
                                 segmentNum++;
@@ -1590,7 +2124,7 @@
                             const Z_tr_ohm = (Z_pct / 100) * Z_base;
                             const X_tr = Z_tr_ohm * 0.98;
                             const R_tr = Z_tr_ohm * 0.2;
-                            const Vd_tr = K_phase * I_b * (R_tr * PF + X_tr * sinPhi);
+                            const Vd_tr = K_current * I_b * (R_tr * PF + X_tr * sinPhi);
                             const Vd_tr_pct = (Vd_tr / V_line) * 100;
                             totalDrop += Vd_tr;
                             
@@ -1619,16 +2153,18 @@
                             if (cable3Idx && len3 > 0 && maxSingleInverterPower > 0) {
                                 const cable3 = App.cache.impedance[cable3Idx];
                                 if (cable3) {
-                                    const I_b_secondary = (maxSingleInverterPower * 1000) / (K_phase * V_line);
+                                    const I_b_secondary = (maxSingleInverterPower * 1000) / (K_current * V_line);
                                     const R = cable3.r_ohm || cable3.resistance_ohm_per_km || 0;
                                     const X = cable3.x_ohm || cable3.reactance_ohm_per_km || 0;
                                     const L_km = len3 / 1000;
-                                    const Vd3 = K_phase * I_b_secondary * (R * PF + X * sinPhi) * L_km;
+                                    const Vd3 = K_vd * I_b_secondary * (R * PF + X * sinPhi) * L_km;
                                     const Vd3_pct = (Vd3 / V_line) * 100;
                                     totalDrop += Vd3;
                                     
-                                    const vd3Formula = is3Ph ? 'ΔV = √3 × I_b × (R·cosθ + X·sinθ) × L' : 'ΔV = I_b × (R·cosθ + X·sinθ) × L';
-                                    const vd3Calc = is3Ph ? `1.732 × ${I_b_secondary.toFixed(2)}` : `${I_b_secondary.toFixed(2)}`;
+                                    const vd3Formula = is3Ph
+                                        ? 'ΔV = √3 × I_b × (R·cosθ + X·sinθ) × L'
+                                        : 'ΔV = 2 × I_b × (R·cosθ + X·sinθ) × L';
+                                    const vd3Calc = is3Ph ? `1.732 × ${I_b_secondary.toFixed(2)}` : `2 × ${I_b_secondary.toFixed(2)}`;
                                     
                                     App.reportData.vd.push({
                                         title: `${segmentNum}. 二次側線路 (Secondary Circuit) - 單台最大功率`,
@@ -1664,7 +2200,7 @@
                         
                         // 短路電流計算（僅三相系統需要計算）
                         if (!is3Ph) {
-                            scLog.innerHTML = '<div class="text-gray-400 text-center p-4"><i class="fa-solid fa-info-circle text-2xl mb-2 block"></i>單相系統不需要計算短路電流</div>';
+                            scLog.innerHTML = '<div class="text-gray-400 text-center p-4"><i class="fa-solid fa-info-circle text-2xl mb-2 block"></i>依低壓用戶斷路器之額定極限短路啟斷容量選用</div>';
                             App.reportData.scFinal = 'N/A (單相系統)';
                         } else {
                         // 短路電流計算（標么值法 - Per Unit Method）
@@ -1869,7 +2405,8 @@
                     const resDiv = document.getElementById('planningResults');
                     const modIdx = document.getElementById('activeModuleSelect').value;
                     const rows = document.querySelectorAll('#inverterListBody tr');
-                    const roofCount = parseInt(document.getElementById('roofCount').value) || 1;
+                    const roofs = App.ui.getRoofList();
+                    const roofCount = Math.max(1, roofs.length);
                     
                     if(modIdx === "" || rows.length === 0) {
                         resDiv.innerHTML = `<div class="text-center text-gray-400 p-8 border-2 border-dashed rounded-lg col-span-full">請先選擇模組並配置逆變器...</div>`;
@@ -2141,69 +2678,49 @@
                         }
                         
                         // 提取 MPPT 最大電流數值（處理不同格式）
-                        // 優先使用 Max Input Current Total A（總電流），如果沒有則使用每MPPT電流
-                        let maxCurrentPerMPPT = null; // 不使用預設值，如果沒有有效資料則為null
+                        // 定義：一般情況下「MPPT最大電流」指「每一個 MPPT 的最大電流」。
+                        // - 若 MPPT > 1：優先使用每 MPPT 欄位；僅在缺資料或特定機型（如 M125HV）時，才用「總電流 ÷ MPPT數」推回每 MPPT。
+                        // - 若 MPPT = 1：每 MPPT 最大電流 = 該 MPPT 最大電流（可直接用每 MPPT 欄位或總電流欄位）。
+                        let maxCurrentPerMPPT = null; // 若無有效資料則為 null
+                        const mpptCount = parseInt(inv.num_mpp_trackers || 0) || 0;
+                        const isM125HV = /m125hv/i.test(String(inv.model_name || '')) || /m125hv/i.test(String(inv.series || ''));
                         
-                        // 優先檢查總電流欄位（Max Input Current Total A）
-                        let totalCurrent = null;
-                        const totalCurrentField = inv.max_input_current_total_a || inv.max_input_current_total || 
+                        const parseCurrent = (value, maxAllowed) => {
+                            if (value === null || value === undefined || value === '') return null;
+                            if (typeof value === 'number') {
+                                if (!isNaN(value) && value > 0 && value <= maxAllowed) return value;
+                                return null;
+                            }
+                            const s = String(value).trim();
+                            if (s.includes('999') || s.toLowerCase().includes('na') || s.toLowerCase().includes('n/a')) return null;
+                            const m = s.match(/^[\d.]+/);
+                            if (!m) return null;
+                            const num = parseFloat(m[0]);
+                            if (!isNaN(num) && num > 0 && num <= maxAllowed) return num;
+                            return null;
+                        };
+                        
+                        // 候選欄位：總電流與每MPPT電流
+                        const totalCurrentField = inv.max_input_current_total_a || inv.max_input_current_total ||
                                                  inv['Max Input Current Total A'] || inv['max_input_current_total_a'];
+                        const totalCurrent = parseCurrent(totalCurrentField, 1000); // 總電流可能較大
+                        const perMpptCurrent = parseCurrent(inv.max_input_current_per_mppt_a, 100); // 每MPPT通常 <= 100A
                         
-                        if (totalCurrentField) {
-                            let value = totalCurrentField;
-                            // 如果是數字，直接使用
-                            if (typeof value === 'number') {
-                                if (!isNaN(value) && value > 0 && value <= 1000) { // 總電流可能較大
-                                    totalCurrent = value;
-                                }
+                        if (mpptCount <= 1) {
+                            // MPPT=1：每MPPT最大電流 = 該MPPT最大電流（per-mppt 欄位優先，其次總電流欄位）
+                            maxCurrentPerMPPT = perMpptCurrent !== null ? perMpptCurrent : (totalCurrent !== null ? totalCurrent : null);
+                        } else {
+                            // MPPT>1：一般優先 per-mppt 欄位；若是 M125HV 或 per-mppt 缺資料，才用總電流÷MPPT
+                            if (!isM125HV && perMpptCurrent !== null) {
+                                maxCurrentPerMPPT = perMpptCurrent;
+                            } else if (totalCurrent !== null) {
+                                maxCurrentPerMPPT = totalCurrent / mpptCount;
+                                console.log(`逆變器 ${inv.model_name} 使用總電流 ${totalCurrent}A ÷ ${mpptCount} MPPT = ${maxCurrentPerMPPT.toFixed(2)}A/MPPT`);
+                            } else if (perMpptCurrent !== null) {
+                                // 沒有總電流但有 per-mppt（即便是 M125HV 也退而求其次）
+                                maxCurrentPerMPPT = perMpptCurrent;
                             } else {
-                                // 如果是字串，提取第一個有效的數字
-                                const currentStr = String(value).trim();
-                                if (!currentStr.includes('999') && !currentStr.toLowerCase().includes('na') && !currentStr.toLowerCase().includes('n/a')) {
-                                    const numMatch = currentStr.match(/^[\d.]+/);
-                                    if (numMatch) {
-                                        const num = parseFloat(numMatch[0]);
-                                        if (!isNaN(num) && num > 0 && num <= 1000) {
-                                            totalCurrent = num;
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // 如果有總電流，除以MPPT數量得到每MPPT電流
-                            if (totalCurrent !== null && inv.num_mpp_trackers > 0) {
-                                maxCurrentPerMPPT = totalCurrent / inv.num_mpp_trackers;
-                                console.log(`逆變器 ${inv.model_name} 使用總電流 ${totalCurrent}A，除以 ${inv.num_mpp_trackers} 個MPPT = ${maxCurrentPerMPPT.toFixed(2)}A/MPPT`);
-                            }
-                        }
-                        
-                        // 如果沒有總電流，使用每MPPT電流欄位
-                        if (maxCurrentPerMPPT === null && inv.max_input_current_per_mppt_a) {
-                            let value = inv.max_input_current_per_mppt_a;
-                            // 如果是數字，直接使用
-                            if (typeof value === 'number') {
-                                if (!isNaN(value) && value > 0 && value <= 100) { // 合理性檢查：MPPT電流通常在100A以內
-                                    maxCurrentPerMPPT = value;
-                                } else {
-                                    console.warn(`逆變器 ${inv.model_name} 的 MPPT 最大電流值異常: ${value}A`);
-                                }
-                            } else {
-                                // 如果是字串，提取第一個有效的數字
-                                const currentStr = String(value).trim();
-                                // 排除明顯錯誤的值（如包含999等）
-                                if (currentStr.includes('999') || currentStr.toLowerCase().includes('na') || currentStr.toLowerCase().includes('n/a')) {
-                                    console.warn(`逆變器 ${inv.model_name} 的 MPPT 最大電流值可能錯誤: ${currentStr}`);
-                                } else {
-                                    const numMatch = currentStr.match(/^[\d.]+/);
-                                    if (numMatch) {
-                                        const num = parseFloat(numMatch[0]);
-                                        if (!isNaN(num) && num > 0 && num <= 100) { // 合理性檢查：MPPT電流通常在100A以內
-                                            maxCurrentPerMPPT = num;
-                                        } else {
-                                            console.warn(`逆變器 ${inv.model_name} 的 MPPT 最大電流值異常: ${num}A`);
-                                        }
-                                    }
-                                }
+                                maxCurrentPerMPPT = null;
                             }
                         }
                         
@@ -2216,7 +2733,9 @@
                         
                         // 計算最大並聯串數：MPPT最大電流 / 模組最大電流（I_mp）
                         // 如果沒有有效的MPPT最大電流值，使用保守估計
-                        const effectiveMaxCurrent = maxCurrentPerMPPT !== null ? maxCurrentPerMPPT : 30; // 保守預設值用於計算
+                        // 並聯數電流容許：MPPT最大電流 +5% buffer
+                        const CURRENT_BUFFER_FACTOR = 1.05;
+                        const effectiveMaxCurrent = maxCurrentPerMPPT !== null ? (maxCurrentPerMPPT * CURRENT_BUFFER_FACTOR) : 30; // 保守預設值用於計算
                         const maxParallelStrings = I_string > 0 ? Math.floor(effectiveMaxCurrent / I_string) : 1;
                         const finalMaxParallelStrings = maxParallelStrings > 0 ? maxParallelStrings : 1;
                         
@@ -2408,7 +2927,8 @@
                             
                             // 計算最大的可能總串數 (所有MPPT都插滿)
                             // 每一MPPT能並多少串列取決於每一串最大電流與MPPT最大輸入電流
-                            const maxStringsPerMPPT = Math.floor(maxCurrentPerMPPT / I_string);
+                            const CURRENT_BUFFER_FACTOR = 1.05;
+                            const maxStringsPerMPPT = Math.floor(((maxCurrentPerMPPT ?? 0) * CURRENT_BUFFER_FACTOR) / I_string);
                             
                             // 如果連1串都不能放（電流限制），那就沒戲唱了
                             if (maxStringsPerMPPT > 0) {
@@ -2684,7 +3204,8 @@
                                         }
                                         
                                         // 屋頂分配
-                                        const roofAssign = `屋頂 ${((m-1) % roofCount) + 1}`;
+                                        const roof = roofs[(m - 1) % roofCount];
+                                        const roofAssign = (roof && roof.name) ? String(roof.name) : `屋頂 ${((m-1) % roofCount) + 1}`;
                                         
                                         // 顯示串列資訊
                                         const stringDisplay = mpptStrings > 1
@@ -2760,8 +3281,8 @@
                             // Add detailed stats for report
                             stats: {
                                 mpptRange: `${mppt_min}~${mppt_max}V`,
-                                limitStr: `${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片, Nopt:${N_opt}片)`,
-                                maxCurrent: `MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串`,
+                                limitStr: `${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片)`,
+                                maxCurrent: `MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串 (MPPT×1.05)`,
                                 tempCoef: `Voc=${(coef_Voc*100).toFixed(2)}%/°C, Vmp=${(coef_Vmp*100).toFixed(2)}%/°C`,
                                 singleModVoc: `${(mod.v_oc * (1 + coef_Voc * (T_max - T_stc))).toFixed(2)}V@75°C / ${(mod.v_oc * (1 + coef_Voc * (T_min - T_stc))).toFixed(2)}V@0°C`,
                                 singleModVmp: `${((mod.v_mp || mod.v_oc * 0.85) * (1 + coef_Vmp * (T_max - T_stc))).toFixed(2)}V`
@@ -2779,8 +3300,8 @@
                                     <div class="text-xs text-gray-500 mb-2 flex gap-4 flex-wrap">
                                         <span><i class="fa-solid fa-layer-group mr-1"></i>總片數: ${targetPanelsTotal} <span class="${hasUnassigned ? 'text-red-600 font-bold' : ''}">(已分配: ${totalAssigned} 片)</span></span>
                                         <span><i class="fa-solid fa-ruler-horizontal mr-1"></i>MPPT範圍: ${isNaN(mppt_min) || isNaN(mppt_max) ? 'N/A' : `${mppt_min}~${mppt_max}V`}</span>
-                                        <span><i class="fa-solid fa-bolt mr-1"></i>串列限制: ${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片, Nopt:${N_opt}片)</span>
-                                        <span><i class="fa-solid fa-plug mr-1"></i>MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常，請檢查' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串 ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? `(${maxCurrentPerMPPT}A ÷ ${I_string.toFixed(2)}A)` : '(請檢查逆變器規格)'}</span>
+                                        <span><i class="fa-solid fa-bolt mr-1"></i>串列限制: ${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片)</span>
+                                        <span><i class="fa-solid fa-plug mr-1"></i>MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常，請檢查' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串 ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? `(${(maxCurrentPerMPPT*1.05).toFixed(2)}A(=MPPT×1.05) ÷ ${I_string.toFixed(2)}A)` : '(請檢查逆變器規格)'}</span>
                                         <span><i class="fa-solid fa-thermometer-half mr-1"></i>溫度係數: Voc=${(coef_Voc*100).toFixed(2)}%/°C, Vmp=${(coef_Vmp*100).toFixed(2)}%/°C</span>
                                         <span><i class="fa-solid fa-bolt mr-1"></i>單片模組Voc: ${(mod.v_oc * (1 + coef_Voc * (T_max - T_stc))).toFixed(2)}V@75°C / ${(mod.v_oc * (1 + coef_Voc * (T_min - T_stc))).toFixed(2)}V@0°C</span>
                                         <span><i class="fa-solid fa-bolt mr-1"></i>單片模組Vmp(75°C): ${((mod.v_mp || mod.v_oc * 0.85) * (1 + coef_Vmp * (T_max - T_stc))).toFixed(2)}V</span>
@@ -2799,7 +3320,8 @@
                 saveState: () => {
                     const state = {
                         v: document.getElementById('gridVoltage').value,
-                        panels: document.getElementById('plannedPanels').value,
+                        panels: document.getElementById('plannedPanels').value, // 保留相容舊版（總片數）
+                        roofs: Array.isArray(App.roofs) ? App.roofs : [],
                         mva: document.getElementById('sourceMVA').value
                     };
                     localStorage.setItem(CONFIG.storageKey, JSON.stringify(state));
@@ -2816,8 +3338,21 @@
                     try {
                         const s = JSON.parse(raw);
                         if(s.v) document.getElementById('gridVoltage').value = s.v;
-                        if(s.panels) document.getElementById('plannedPanels').value = s.panels;
                         if(s.mva) document.getElementById('sourceMVA').value = s.mva;
+                        
+                        // 屋頂清單（新版本）：若存在 roofs 則以 roofs 為準；否則用舊版 panels 轉成單一屋頂
+                        if (Array.isArray(s.roofs) && s.roofs.length > 0) {
+                            App.roofs = s.roofs.map((r, idx) => ({
+                                id: r?.id ?? (Date.now() + idx),
+                                name: (r?.name ? String(r.name) : `屋頂 ${idx + 1}`),
+                                panels: parseInt(r?.panels || 0) || 0
+                            }));
+                        } else if (typeof s.panels !== 'undefined') {
+                            App.roofs = [{ id: Date.now(), name: '屋頂 1', panels: parseInt(s.panels || 0) || 0 }];
+                        }
+                        // 重新渲染並同步總片數
+                        App.ui.renderRoofs();
+                        App.ui.syncPlannedPanelsFromRoofs();
                         // 觸發容量計算
                         setTimeout(() => App.calc.runDebounced(), 500);
                     } catch(e) { console.error("Load State Error", e); }
@@ -3069,7 +3604,7 @@
                         const f = document.createElement('div');
                         f.className = 'pdf-footer-layer';
                         f.innerHTML = `
-                            <div>Generated by SolarPlanning Tool v5.5</div>
+                            <div>Generated by SolarPlanning Tool</div>
                             <div>第 ${pageNum} 頁</div>
                         `;
                         p.appendChild(f);
@@ -3173,7 +3708,9 @@
             }
         };
 
-        document.addEventListener('DOMContentLoaded', App.init);
+        document.addEventListener('DOMContentLoaded', App.auth.init);
     </script>
 </body>
 </html>
+
+
