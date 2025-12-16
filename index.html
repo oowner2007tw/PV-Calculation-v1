@@ -3020,7 +3020,7 @@
                             // Add detailed stats for report
                             stats: {
                                 mpptRange: `${mppt_min}~${mppt_max}V`,
-                                limitStr: `${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片, Nopt:${N_opt}片)`,
+                                limitStr: `${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片)`,
                                 maxCurrent: `MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串`,
                                 tempCoef: `Voc=${(coef_Voc*100).toFixed(2)}%/°C, Vmp=${(coef_Vmp*100).toFixed(2)}%/°C`,
                                 singleModVoc: `${(mod.v_oc * (1 + coef_Voc * (T_max - T_stc))).toFixed(2)}V@75°C / ${(mod.v_oc * (1 + coef_Voc * (T_min - T_stc))).toFixed(2)}V@0°C`,
@@ -3039,7 +3039,7 @@
                                     <div class="text-xs text-gray-500 mb-2 flex gap-4 flex-wrap">
                                         <span><i class="fa-solid fa-layer-group mr-1"></i>總片數: ${targetPanelsTotal} <span class="${hasUnassigned ? 'text-red-600 font-bold' : ''}">(已分配: ${totalAssigned} 片)</span></span>
                                         <span><i class="fa-solid fa-ruler-horizontal mr-1"></i>MPPT範圍: ${isNaN(mppt_min) || isNaN(mppt_max) ? 'N/A' : `${mppt_min}~${mppt_max}V`}</span>
-                                        <span><i class="fa-solid fa-bolt mr-1"></i>串列限制: ${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片, Nopt:${N_opt}片)</span>
+                                        <span><i class="fa-solid fa-bolt mr-1"></i>串列限制: ${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片)</span>
                                         <span><i class="fa-solid fa-plug mr-1"></i>MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常，請檢查' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串 ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? `(${maxCurrentPerMPPT}A ÷ ${I_string.toFixed(2)}A)` : '(請檢查逆變器規格)'}</span>
                                         <span><i class="fa-solid fa-thermometer-half mr-1"></i>溫度係數: Voc=${(coef_Voc*100).toFixed(2)}%/°C, Vmp=${(coef_Vmp*100).toFixed(2)}%/°C</span>
                                         <span><i class="fa-solid fa-bolt mr-1"></i>單片模組Voc: ${(mod.v_oc * (1 + coef_Voc * (T_max - T_stc))).toFixed(2)}V@75°C / ${(mod.v_oc * (1 + coef_Voc * (T_min - T_stc))).toFixed(2)}V@0°C</span>
