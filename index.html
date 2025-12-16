@@ -186,8 +186,8 @@
                                 系統基礎參數
                             </h3>
                             <div class="space-y-4">
-                                <div class="grid grid-cols-2 gap-4">
-                                    <div class="space-y-1">
+                                <div class="grid grid-cols-12 gap-4 items-start">
+                                    <div class="space-y-1 col-span-12 md:col-span-4">
                                         <label class="text-xs font-bold text-slate-500 uppercase">電壓 (V)</label>
                                         <select id="gridVoltage" class="inp-param w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition">
                                             <option value="380" selected>380V (3Φ)</option>
@@ -197,7 +197,7 @@
                                             <option value="480">480V (3Φ)</option>
                                         </select>
                                     </div>
-                                    <div class="space-y-1">
+                                    <div class="space-y-1 col-span-12 md:col-span-8">
                                         <div class="flex items-center justify-between">
                                             <label class="text-xs font-bold text-slate-500 uppercase">屋頂清單 (Roofs)</label>
                                             <button type="button" id="addRoofBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition border border-slate-200 font-bold">
@@ -1801,7 +1801,7 @@
                         
                         // 短路電流計算（僅三相系統需要計算）
                         if (!is3Ph) {
-                            scLog.innerHTML = '<div class="text-gray-400 text-center p-4"><i class="fa-solid fa-info-circle text-2xl mb-2 block"></i>單相系統不需要計算短路電流</div>';
+                            scLog.innerHTML = '<div class="text-gray-400 text-center p-4"><i class="fa-solid fa-info-circle text-2xl mb-2 block"></i>依低壓用戶斷路器之額定極限短路啟斷容量選用</div>';
                             App.reportData.scFinal = 'N/A (單相系統)';
                         } else {
                         // 短路電流計算（標么值法 - Per Unit Method）
