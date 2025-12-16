@@ -2465,7 +2465,9 @@
                         
                         // 計算最大並聯串數：MPPT最大電流 / 模組最大電流（I_mp）
                         // 如果沒有有效的MPPT最大電流值，使用保守估計
-                        const effectiveMaxCurrent = maxCurrentPerMPPT !== null ? maxCurrentPerMPPT : 30; // 保守預設值用於計算
+                        // 並聯數電流容許：MPPT最大電流 +5% buffer
+                        const CURRENT_BUFFER_FACTOR = 1.05;
+                        const effectiveMaxCurrent = maxCurrentPerMPPT !== null ? (maxCurrentPerMPPT * CURRENT_BUFFER_FACTOR) : 30; // 保守預設值用於計算
                         const maxParallelStrings = I_string > 0 ? Math.floor(effectiveMaxCurrent / I_string) : 1;
                         const finalMaxParallelStrings = maxParallelStrings > 0 ? maxParallelStrings : 1;
                         
@@ -2657,7 +2659,8 @@
                             
                             // 計算最大的可能總串數 (所有MPPT都插滿)
                             // 每一MPPT能並多少串列取決於每一串最大電流與MPPT最大輸入電流
-                            const maxStringsPerMPPT = Math.floor(maxCurrentPerMPPT / I_string);
+                            const CURRENT_BUFFER_FACTOR = 1.05;
+                            const maxStringsPerMPPT = Math.floor(((maxCurrentPerMPPT ?? 0) * CURRENT_BUFFER_FACTOR) / I_string);
                             
                             // 如果連1串都不能放（電流限制），那就沒戲唱了
                             if (maxStringsPerMPPT > 0) {
@@ -3011,7 +3014,7 @@
                             stats: {
                                 mpptRange: `${mppt_min}~${mppt_max}V`,
                                 limitStr: `${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片)`,
-                                maxCurrent: `MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串`,
+                                maxCurrent: `MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串 (MPPT×1.05)`,
                                 tempCoef: `Voc=${(coef_Voc*100).toFixed(2)}%/°C, Vmp=${(coef_Vmp*100).toFixed(2)}%/°C`,
                                 singleModVoc: `${(mod.v_oc * (1 + coef_Voc * (T_max - T_stc))).toFixed(2)}V@75°C / ${(mod.v_oc * (1 + coef_Voc * (T_min - T_stc))).toFixed(2)}V@0°C`,
                                 singleModVmp: `${((mod.v_mp || mod.v_oc * 0.85) * (1 + coef_Vmp * (T_max - T_stc))).toFixed(2)}V`
@@ -3030,7 +3033,7 @@
                                         <span><i class="fa-solid fa-layer-group mr-1"></i>總片數: ${targetPanelsTotal} <span class="${hasUnassigned ? 'text-red-600 font-bold' : ''}">(已分配: ${totalAssigned} 片)</span></span>
                                         <span><i class="fa-solid fa-ruler-horizontal mr-1"></i>MPPT範圍: ${isNaN(mppt_min) || isNaN(mppt_max) ? 'N/A' : `${mppt_min}~${mppt_max}V`}</span>
                                         <span><i class="fa-solid fa-bolt mr-1"></i>串列限制: ${limit_str_min} <= N <= ${limit_str_max_mppt_final} 片/串 (Nmin(75°C):${Nmin}片, Nmax(Safety):${Nmax}片)</span>
-                                        <span><i class="fa-solid fa-plug mr-1"></i>MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常，請檢查' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串 ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? `(${maxCurrentPerMPPT}A ÷ ${I_string.toFixed(2)}A)` : '(請檢查逆變器規格)'}</span>
+                                        <span><i class="fa-solid fa-plug mr-1"></i>MPPT最大電流: ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? maxCurrentPerMPPT + 'A' : (inv.max_input_current_per_mppt_a ? '資料異常，請檢查' : '資料缺失')} | 模組最大電流: ${I_string.toFixed(2)}A | 可並聯最多 ${finalMaxParallelStrings} 串 ${maxCurrentPerMPPT !== null && maxCurrentPerMPPT !== 999 ? `(${(maxCurrentPerMPPT*1.05).toFixed(2)}A(=MPPT×1.05) ÷ ${I_string.toFixed(2)}A)` : '(請檢查逆變器規格)'}</span>
                                         <span><i class="fa-solid fa-thermometer-half mr-1"></i>溫度係數: Voc=${(coef_Voc*100).toFixed(2)}%/°C, Vmp=${(coef_Vmp*100).toFixed(2)}%/°C</span>
                                         <span><i class="fa-solid fa-bolt mr-1"></i>單片模組Voc: ${(mod.v_oc * (1 + coef_Voc * (T_max - T_stc))).toFixed(2)}V@75°C / ${(mod.v_oc * (1 + coef_Voc * (T_min - T_stc))).toFixed(2)}V@0°C</span>
                                         <span><i class="fa-solid fa-bolt mr-1"></i>單片模組Vmp(75°C): ${((mod.v_mp || mod.v_oc * 0.85) * (1 + coef_Vmp * (T_max - T_stc))).toFixed(2)}V</span>
