@@ -158,6 +158,14 @@
             <div class="text-sm text-slate-600 leading-relaxed">
                 請輸入通行碼。首次登入會將此瀏覽器裝置綁定；之後僅允許同一裝置登入。
             </div>
+            <div id="authStatus" class="text-xs rounded-lg border border-slate-200 bg-slate-50 p-3 text-slate-600">
+                <div class="font-bold text-slate-700 mb-1"><i class="fa-solid fa-signal mr-1"></i>連線狀態</div>
+                <div id="authStatusLines" class="space-y-0.5">
+                    <div>FingerprintJS：檢查中…</div>
+                    <div>Supabase：檢查中…</div>
+                    <div>`access_control` 權限：檢查中…</div>
+                </div>
+            </div>
             <form id="loginForm" class="space-y-3">
                 <div class="space-y-1">
                     <label class="text-xs font-bold text-slate-500 uppercase">Passcode</label>
@@ -817,6 +825,8 @@
                         await App.auth.ensureFingerprint();
                         await App.auth.ensureDb();
                         App.auth.bindForm();
+                        // Run non-blocking self-check so you can see whether DB/RLS is blocking
+                        App.auth.selfCheck();
                         App.auth.setMsg('', false);
                     } catch (e) {
                         console.error('Auth init failed:', e);
@@ -914,7 +924,11 @@
                             .eq('passcode', passcode)
                             .maybeSingle();
 
-                        if (error) throw error;
+                        if (error) {
+                            // 常見：RLS/權限不足會是 42501
+                            const code = error?.code ? ` (${error.code})` : '';
+                            throw new Error(`Supabase 查詢失敗${code}: ${error?.message || error}`);
+                        }
                         if (!data) {
                             App.auth.setMsg('通行碼無效或不存在', true);
                             return;
@@ -931,7 +945,10 @@
                                 .update({ bound_device_id: vid, is_used: true })
                                 .eq('passcode', passcode)
                                 .eq('is_used', false);
-                            if (upErr) throw upErr;
+                            if (upErr) {
+                                const code = upErr?.code ? ` (${upErr.code})` : '';
+                                throw new Error(`Supabase 更新失敗${code}: ${upErr?.message || upErr}`);
+                            }
                         } else {
                             // 3) Returning user: validate device id
                             if (!bound || bound !== vid) {
@@ -952,6 +969,53 @@
                     } finally {
                         App.auth.setLoading(false);
                     }
+                },
+
+                // 顯示連線/權限自檢狀態（不阻擋登入，但可快速判斷是否連得上/是否被 RLS 擋）
+                setStatusLines: (lines) => {
+                    const box = document.getElementById('authStatusLines');
+                    if (!box) return;
+                    box.innerHTML = lines.map(l => `<div>${l}</div>`).join('');
+                },
+
+                selfCheck: async () => {
+                    const lines = [];
+                    // FingerprintJS
+                    try {
+                        const vid = await App.auth.ensureFingerprint();
+                        lines.push(`FingerprintJS：<span class="text-green-700 font-bold">OK</span> (visitorId: ${String(vid).slice(0, 8)}…)`);
+                    } catch (e) {
+                        lines.push(`FingerprintJS：<span class="text-red-700 font-bold">失敗</span>（${e?.message || e}）`);
+                    }
+
+                    // Supabase init
+                    try {
+                        await App.auth.ensureDb();
+                        lines.push(`Supabase：<span class="text-green-700 font-bold">OK</span>`);
+                    } catch (e) {
+                        lines.push(`Supabase：<span class="text-red-700 font-bold">失敗</span>（${e?.message || e}）`);
+                        App.auth.setStatusLines(lines);
+                        return;
+                    }
+
+                    // access_control permission probe
+                    try {
+                        const { data, error } = await App.db
+                            .from('access_control')
+                            .select('passcode')
+                            .limit(1);
+                        if (error) {
+                            const code = error?.code ? ` (${error.code})` : '';
+                            lines.push(`\`access_control\` 權限：<span class="text-red-700 font-bold">失敗</span>${code}（${error?.message || error}）`);
+                            lines.push(`<span class="text-slate-500">提示：若啟用 RLS，需允許 anon 角色對 \`access_control\` 進行 select/update。</span>`);
+                        } else {
+                            lines.push(`\`access_control\` 權限：<span class="text-green-700 font-bold">OK</span>（可讀取 ${Array.isArray(data) ? data.length : 0} 筆）`);
+                        }
+                    } catch (e) {
+                        lines.push(`\`access_control\` 權限：<span class="text-red-700 font-bold">失敗</span>（${e?.message || e}）`);
+                    }
+
+                    App.auth.setStatusLines(lines);
                 }
             },
 
