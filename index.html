@@ -8,7 +8,8 @@
     <!-- 1. 載入外部函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <script src="https://openfpcdn.io/fingerprintjs/v4"></script>
+    <!-- FingerprintJS v4 (IIFE build exposes window.FingerprintJS) -->
+    <script src="https://openfpcdn.io/fingerprintjs/v4/iife.js"></script>
     <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -864,27 +865,39 @@
                     App.auth.fpLoadPromise = new Promise((resolve, reject) => {
                         // 若 head 內 script 尚未載入完成，做輪詢等待
                         const start = Date.now();
-                        const timeoutMs = 8000;
+                        const timeoutMs = 6000;
                         const tick = () => {
                             if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) {
                                 resolve();
                                 return;
                             }
                             if (Date.now() - start > timeoutMs) {
-                                // 最後嘗試：動態插入 script（避免某些情況 head script 未生效）
-                                try {
+                                // 若 head script 因網路/CSP/阻擋未生效：依序嘗試多個 CDN
+                                const tryLoad = (src) => new Promise((res, rej) => {
                                     const s = document.createElement('script');
-                                    s.src = 'https://openfpcdn.io/fingerprintjs/v4';
+                                    s.src = src;
                                     s.async = true;
-                                    s.onload = () => {
-                                        if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) resolve();
-                                        else reject(new Error('FingerprintJS CDN 載入完成但未提供 FingerprintJS.load'));
-                                    };
-                                    s.onerror = () => reject(new Error('FingerprintJS CDN 載入失敗（onerror）'));
+                                    s.onload = () => res(true);
+                                    s.onerror = () => rej(new Error(`FingerprintJS CDN 載入失敗：${src}`));
                                     document.head.appendChild(s);
-                                } catch (e) {
-                                    reject(new Error(`FingerprintJS 未載入（請檢查 CDN）：${e?.message || e}`));
-                                }
+                                });
+
+                                (async () => {
+                                    try {
+                                        // 1) OpenFP CDN IIFE
+                                        await tryLoad('https://openfpcdn.io/fingerprintjs/v4/iife.js');
+                                        if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) { resolve(); return; }
+                                    } catch (_) {}
+                                    try {
+                                        // 2) jsDelivr 官方套件（IIFE/UMD 也會掛到 window.FingerprintJS）
+                                        await tryLoad('https://cdn.jsdelivr.net/npm/@fingerprintjs/fingerprintjs@4/dist/fp.min.js');
+                                        if (typeof FingerprintJS !== 'undefined' && FingerprintJS?.load) { resolve(); return; }
+                                    } catch (e) {
+                                        reject(e);
+                                        return;
+                                    }
+                                    reject(new Error('FingerprintJS 已載入但未提供 FingerprintJS.load（可能被 CSP 攔截或 CDN 回應異常）'));
+                                })();
                                 return;
                             }
                             setTimeout(tick, 100);
