@@ -957,11 +957,13 @@
                             '接地種類'
                         );
                         const groundWireSizes = await fetchOptionalByCandidates(
-                            ['grounding_wire_sizes', 'ground_wire_sizes', 'grounding_wire_size_map', 'ground_wire_size_map', 'earthing_wire_sizes', '接地對應線徑'],
+                            // 指定：對應到 Supabase grounding_wire_sizing table
+                            ['grounding_wire_sizing', 'grounding_wire_sizes', 'ground_wire_sizes', 'grounding_wire_size_map', 'ground_wire_size_map', 'earthing_wire_sizes', '接地對應線徑'],
                             '接地對應線徑'
                         );
                         const breakerStandards = await fetchOptionalByCandidates(
-                            ['breaker_standard', 'breaker_standards', 'breaker_standard_table', 'breakerStandards', 'breaker', 'breaker_specs'],
+                            // 指定：對應到 Supabase Breaker Standards table
+                            ['Breaker Standards', 'breaker_standards', 'breaker_standard', 'breaker_standard_table', 'breakerStandards', 'breaker', 'breaker_specs'],
                             'Breaker Standard'
                         );
                         
