@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>太陽光電規劃系統 v5.5 (串列規劃版)</title>
+    <title>太陽光電規劃系統 (串列規劃版)</title>
     
     <!-- 1. 載入外部函式庫 -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -149,7 +149,7 @@
                     <i class="fa-solid fa-solar-panel text-2xl"></i>
                 </div>
                 <div>
-                    <h1 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">太陽光電全方位規劃系統 <span class="text-blue-600">v5.5</span></h1>
+                    <h1 class="text-xl md:text-2xl font-bold text-slate-800 tracking-tight">太陽光電全方位規劃系統</h1>
                     <p class="text-xs text-slate-500 font-medium mt-0.5">串列規劃與驗證 | Engineering Design Tool</p>
                 </div>
             </div>
@@ -198,8 +198,14 @@
                                         </select>
                                     </div>
                                     <div class="space-y-1">
-                                        <label class="text-xs font-bold text-slate-500 uppercase">屋頂數量 (Roofs)</label>
-                                        <input type="number" id="roofCount" value="1" min="1" class="inp-param w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none transition">
+                                        <div class="flex items-center justify-between">
+                                            <label class="text-xs font-bold text-slate-500 uppercase">屋頂清單 (Roofs)</label>
+                                            <button type="button" id="addRoofBtn" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-lg transition border border-slate-200 font-bold">
+                                                <i class="fa-solid fa-plus mr-1"></i>新增屋頂
+                                            </button>
+                                        </div>
+                                        <div id="roofList" class="space-y-2"></div>
+                                        <div class="text-[11px] text-slate-500 pl-1">可新增/刪除屋頂；每一屋頂可輸入規劃片數（系統會自動加總成「規劃總片數」）</div>
                                     </div>
                                 </div>
                                 
@@ -213,9 +219,9 @@
 
                                 <div class="grid grid-cols-2 gap-4">
                                     <div class="space-y-1">
-                                        <label class="text-xs font-bold text-slate-500 uppercase">規劃片數 (Panels)</label>
+                                        <label class="text-xs font-bold text-slate-500 uppercase">規劃總片數 (Panels)</label>
                                         <div class="relative">
-                                            <input type="number" id="plannedPanels" class="inp-param w-full border border-gray-300 rounded-lg p-2.5 text-blue-700 font-bold" placeholder="0" value="0" min="0">
+                                            <input type="number" id="plannedPanels" class="inp-param w-full border border-gray-300 rounded-lg p-2.5 text-blue-700 font-bold bg-slate-50" placeholder="0" value="0" min="0" readonly>
                                             <span class="absolute right-4 top-3.5 text-gray-400 text-sm font-bold">片</span>
                                         </div>
                                         <div id="calculatedCapacity" class="text-xs text-gray-500 mt-1 pl-1">
@@ -590,7 +596,7 @@
                                     </li>
                                     <li class="flex items-start">
                                         <i class="fa-solid fa-arrow-right text-indigo-600 mr-2 mt-1"></i>
-                                        <span><strong>循環分配：</strong>系統會根據使用者輸入的「屋頂數量」循環分配 MPPT 到不同屋頂</span>
+                                        <span><strong>循環分配：</strong>系統會根據使用者設定的「屋頂清單」循環分配 MPPT 到不同屋頂</span>
                                     </li>
                                 </ul>
                             </div>
@@ -720,6 +726,7 @@
             db: null,
             cache: { inverters: [], modules: [], impedance: [], ampPVC: [], ampMetal60: [], ampMetal75: [], ampMetal90: [], conduit: [], conduitFlexNonMetal: [], conduitThickMetal: [], conduitThinMetal: [], inverterImages: [] },
             reportData: { params: {}, vd: [], sc: [], planning: [] },
+            roofs: [],
 
             init: async () => {
                 // 檢查 Supabase 庫是否已載入
@@ -1029,7 +1036,137 @@
                             });
                         });
                     });
+                    // 屋頂清單 UI（在 plannedPanels 的監聽器建立後再初始化，確保同步時可更新容量與計算）
+                    App.ui.initRoofs();
                     observer.observe(document.body, { childList: true, subtree: true });
+                },
+
+                // --- 屋頂清單 (可新增/刪除 + 每屋頂規劃片數) ---
+                initRoofs: () => {
+                    // 初始化資料（若尚未有 roofs）
+                    if (!Array.isArray(App.roofs) || App.roofs.length === 0) {
+                        App.roofs = [{ id: Date.now(), name: '屋頂 1', panels: 0 }];
+                    }
+
+                    // 綁定新增按鈕（只綁一次）
+                    const addBtn = document.getElementById('addRoofBtn');
+                    if (addBtn && !addBtn.hasAttribute('data-listener-added')) {
+                        addBtn.addEventListener('click', () => App.ui.addRoof());
+                        addBtn.setAttribute('data-listener-added', 'true');
+                    }
+
+                    // 綁定清單事件（事件委派，只綁一次）
+                    const list = document.getElementById('roofList');
+                    if (list && !list.hasAttribute('data-listener-added')) {
+                        list.addEventListener('input', (e) => {
+                            const t = e.target;
+                            if (!t || !t.getAttribute) return;
+
+                            // 更新屋頂名稱
+                            const nameId = t.getAttribute('data-roof-name');
+                            if (nameId) {
+                                const r = (App.roofs || []).find(x => String(x.id) === String(nameId));
+                                if (r) r.name = String(t.value || '').trim() || r.name || '屋頂';
+                                // 名稱只影響顯示，仍觸發一次計算刷新
+                                App.calc.runDebounced();
+                                return;
+                            }
+
+                            // 更新屋頂片數並同步到總片數
+                            const panelsId = t.getAttribute('data-roof-panels');
+                            if (panelsId) {
+                                const r = (App.roofs || []).find(x => String(x.id) === String(panelsId));
+                                if (r) {
+                                    let v = parseInt(t.value || 0);
+                                    if (isNaN(v) || v < 0) v = 0;
+                                    r.panels = v;
+                                }
+                                App.ui.syncPlannedPanelsFromRoofs();
+                                return;
+                            }
+                        });
+
+                        list.addEventListener('click', (e) => {
+                            const btn = e.target?.closest?.('button[data-roof-del]');
+                            if (btn) {
+                                const id = btn.getAttribute('data-roof-del');
+                                App.ui.removeRoof(id);
+                            }
+                        });
+
+                        list.setAttribute('data-listener-added', 'true');
+                    }
+
+                    App.ui.renderRoofs();
+                    App.ui.syncPlannedPanelsFromRoofs();
+                },
+
+                renderRoofs: () => {
+                    const list = document.getElementById('roofList');
+                    if (!list) return;
+
+                    if (!Array.isArray(App.roofs) || App.roofs.length === 0) {
+                        App.roofs = [{ id: Date.now(), name: '屋頂 1', panels: 0 }];
+                    }
+
+                    const esc = (s) => String(s ?? '')
+                        .replace(/&/g, '&amp;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+
+                    list.innerHTML = (App.roofs || []).map((r, idx) => {
+                        const roofName = (r && r.name) ? String(r.name) : `屋頂 ${idx + 1}`;
+                        const roofPanels = (r && typeof r.panels !== 'undefined') ? r.panels : 0;
+                        const canDelete = (App.roofs || []).length > 1;
+                        return `
+                            <div class="flex items-center gap-2 bg-white border border-gray-200 rounded-lg p-2 shadow-sm">
+                                <div class="text-xs font-bold text-slate-600 w-14 flex-shrink-0 text-center bg-slate-100 rounded py-1">屋頂</div>
+                                <input type="text" class="inp-param flex-grow border border-gray-200 rounded-md px-2 py-1.5 text-xs bg-gray-50 focus:bg-white" value="${esc(roofName)}" data-roof-name="${r.id}" placeholder="屋頂名稱">
+                                <div class="flex items-center gap-1 flex-shrink-0">
+                                    <input type="number" min="0" class="inp-param w-24 border border-gray-200 rounded-md px-2 py-1.5 text-xs text-blue-700 font-bold bg-gray-50 focus:bg-white text-right" value="${roofPanels}" data-roof-panels="${r.id}">
+                                    <span class="text-xs text-gray-400 font-bold">片</span>
+                                </div>
+                                <button type="button" class="${canDelete ? 'text-red-400 hover:text-red-600' : 'text-gray-200 cursor-not-allowed'} px-2" ${canDelete ? `data-roof-del="${r.id}"` : 'disabled'}>
+                                    <i class="fa-solid fa-trash-can"></i>
+                                </button>
+                            </div>
+                        `;
+                    }).join('');
+                },
+
+                addRoof: () => {
+                    if (!Array.isArray(App.roofs)) App.roofs = [];
+                    const nextIdx = App.roofs.length + 1;
+                    const id = Date.now() + Math.floor(Math.random() * 1000);
+                    App.roofs.push({ id, name: `屋頂 ${nextIdx}`, panels: 0 });
+                    App.ui.renderRoofs();
+                    App.ui.syncPlannedPanelsFromRoofs();
+                },
+
+                removeRoof: (id) => {
+                    if (!Array.isArray(App.roofs)) App.roofs = [{ id: Date.now(), name: '屋頂 1', panels: 0 }];
+                    if (App.roofs.length <= 1) return; // 至少保留 1 個
+                    App.roofs = App.roofs.filter(r => String(r.id) !== String(id));
+                    App.ui.renderRoofs();
+                    App.ui.syncPlannedPanelsFromRoofs();
+                },
+
+                syncPlannedPanelsFromRoofs: () => {
+                    const panelsInput = document.getElementById('plannedPanels');
+                    if (!panelsInput) return;
+                    const total = (Array.isArray(App.roofs) ? App.roofs : []).reduce((sum, r) => {
+                        const v = parseInt(r?.panels || 0);
+                        return sum + (isNaN(v) ? 0 : v);
+                    }, 0);
+                    panelsInput.value = String(total);
+                    // 觸發既有監聽（容量顯示 & 自動計算）
+                    panelsInput.dispatchEvent(new Event('input', { bubbles: true }));
+                },
+
+                getRoofList: () => {
+                    if (Array.isArray(App.roofs) && App.roofs.length > 0) return App.roofs;
+                    return [{ id: 1, name: '屋頂 1', panels: parseInt(document.getElementById('plannedPanels')?.value || 0) || 0 }];
                 },
                 populateSelects: () => {
                     // Cable
@@ -1869,7 +2006,8 @@
                     const resDiv = document.getElementById('planningResults');
                     const modIdx = document.getElementById('activeModuleSelect').value;
                     const rows = document.querySelectorAll('#inverterListBody tr');
-                    const roofCount = parseInt(document.getElementById('roofCount').value) || 1;
+                    const roofs = App.ui.getRoofList();
+                    const roofCount = Math.max(1, roofs.length);
                     
                     if(modIdx === "" || rows.length === 0) {
                         resDiv.innerHTML = `<div class="text-center text-gray-400 p-8 border-2 border-dashed rounded-lg col-span-full">請先選擇模組並配置逆變器...</div>`;
@@ -2684,7 +2822,8 @@
                                         }
                                         
                                         // 屋頂分配
-                                        const roofAssign = `屋頂 ${((m-1) % roofCount) + 1}`;
+                                        const roof = roofs[(m - 1) % roofCount];
+                                        const roofAssign = (roof && roof.name) ? String(roof.name) : `屋頂 ${((m-1) % roofCount) + 1}`;
                                         
                                         // 顯示串列資訊
                                         const stringDisplay = mpptStrings > 1
@@ -2799,7 +2938,8 @@
                 saveState: () => {
                     const state = {
                         v: document.getElementById('gridVoltage').value,
-                        panels: document.getElementById('plannedPanels').value,
+                        panels: document.getElementById('plannedPanels').value, // 保留相容舊版（總片數）
+                        roofs: Array.isArray(App.roofs) ? App.roofs : [],
                         mva: document.getElementById('sourceMVA').value
                     };
                     localStorage.setItem(CONFIG.storageKey, JSON.stringify(state));
@@ -2816,8 +2956,21 @@
                     try {
                         const s = JSON.parse(raw);
                         if(s.v) document.getElementById('gridVoltage').value = s.v;
-                        if(s.panels) document.getElementById('plannedPanels').value = s.panels;
                         if(s.mva) document.getElementById('sourceMVA').value = s.mva;
+                        
+                        // 屋頂清單（新版本）：若存在 roofs 則以 roofs 為準；否則用舊版 panels 轉成單一屋頂
+                        if (Array.isArray(s.roofs) && s.roofs.length > 0) {
+                            App.roofs = s.roofs.map((r, idx) => ({
+                                id: r?.id ?? (Date.now() + idx),
+                                name: (r?.name ? String(r.name) : `屋頂 ${idx + 1}`),
+                                panels: parseInt(r?.panels || 0) || 0
+                            }));
+                        } else if (typeof s.panels !== 'undefined') {
+                            App.roofs = [{ id: Date.now(), name: '屋頂 1', panels: parseInt(s.panels || 0) || 0 }];
+                        }
+                        // 重新渲染並同步總片數
+                        App.ui.renderRoofs();
+                        App.ui.syncPlannedPanelsFromRoofs();
                         // 觸發容量計算
                         setTimeout(() => App.calc.runDebounced(), 500);
                     } catch(e) { console.error("Load State Error", e); }
@@ -3069,7 +3222,7 @@
                         const f = document.createElement('div');
                         f.className = 'pdf-footer-layer';
                         f.innerHTML = `
-                            <div>Generated by SolarPlanning Tool v5.5</div>
+                            <div>Generated by SolarPlanning Tool</div>
                             <div>第 ${pageNum} 頁</div>
                         `;
                         p.appendChild(f);
