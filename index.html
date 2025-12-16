@@ -1713,8 +1713,11 @@
                     if (P_kW > 0 && V_line > 0) {
                         const PF = 0.9; // 功率因數
                         const sinPhi = Math.sqrt(1 - PF * PF);
-                        const K_phase = is3Ph ? 1.732 : 1.0; // 三相係數或單相係數
-                        const I_b = (P_kW * 1000) / (K_phase * V_line);
+                        // 電流計算係數：三相 √3；單相 1
+                        const K_current = is3Ph ? 1.732 : 1.0;
+                        // 電壓降係數：三相 √3；單相 2（往返導線）
+                        const K_vd = is3Ph ? 1.732 : 2.0;
+                        const I_b = (P_kW * 1000) / (K_current * V_line);
                         
                         // 儲存到 reportData
                         const phaseType = is3Ph ? '三相系統' : '單相系統';
@@ -1773,12 +1776,14 @@
                                 const R = cable1.r_ohm || cable1.resistance_ohm_per_km || 0;
                                 const X = cable1.x_ohm || cable1.reactance_ohm_per_km || 0;
                                 const L_km = len1 / 1000;
-                                const Vd1 = K_phase * I_b * (R * PF + X * sinPhi) * L_km;
+                                const Vd1 = K_vd * I_b * (R * PF + X * sinPhi) * L_km;
                                 const Vd1_pct = (Vd1 / V_line) * 100;
                                 totalDrop += Vd1;
                                 
-                                const vdFormula = is3Ph ? 'ΔV = √3 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L' : 'ΔV = I<sub>b</sub> × (R·cosθ + X·sinθ) × L';
-                                const vdCalc = is3Ph ? `1.732 × ${I_b.toFixed(2)}` : `${I_b.toFixed(2)}`;
+                                const vdFormula = is3Ph
+                                    ? 'ΔV = √3 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L'
+                                    : 'ΔV = 2 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L';
+                                const vdCalc = is3Ph ? `1.732 × ${I_b.toFixed(2)}` : `2 × ${I_b.toFixed(2)}`;
                                 
                                 App.reportData.vd.push({
                                     title: `${segmentNum}. 責任分界點線路 (Service Point Cable)`,
@@ -1806,15 +1811,20 @@
                                 const R = cable2.r_ohm || cable2.resistance_ohm_per_km || 0;
                                 const X = cable2.x_ohm || cable2.reactance_ohm_per_km || 0;
                                 const L_km = len2 / 1000;
-                                const Vd2 = K_phase * I_b * (R * PF + X * sinPhi) * L_km;
+                                const Vd2 = K_vd * I_b * (R * PF + X * sinPhi) * L_km;
                                 const Vd2_pct = (Vd2 / V_line) * 100;
                                 totalDrop += Vd2;
+                                
+                                const vd2Formula = is3Ph
+                                    ? 'ΔV = √3 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L'
+                                    : 'ΔV = 2 × I<sub>b</sub> × (R·cosθ + X·sinθ) × L';
+                                const vd2Calc = is3Ph ? `1.732 × ${I_b.toFixed(2)}` : `2 × ${I_b.toFixed(2)}`;
                                 
                                 App.reportData.vd.push({
                                     title: `${segmentNum}. 幹線迴路 (Main Feeder)`,
                                     params: `線徑: ${cable2.wire_size_label || 'N/A'} (${cable2.total_area_mm2 || 'N/A'}mm²), R = ${R} Ω/km, X = ${X} Ω/km, L = ${len2}m (${L_km}km)`,
-                                    formula: '公式: ΔV = √3 × I_b × (R·cosθ + X·sinθ) × L',
-                                    process: `計算過程: ΔV = 1.732 × ${I_b.toFixed(2)} × (${R}×${PF} + ${X}×${sinPhi.toFixed(3)}) × ${L_km}`,
+                                    formula: `公式: ${vd2Formula}`,
+                                    process: `計算過程: ΔV = ${vd2Calc} × (${R}×${PF} + ${X}×${sinPhi.toFixed(3)}) × ${L_km}`,
                                     result: `結果: ΔV₂ = ${Vd2.toFixed(2)} V (${Vd2_pct.toFixed(2)}%)`
                                 });
                                 
@@ -1822,8 +1832,8 @@
                                     <div class="calc-block">
                                         <span class="calc-title">${segmentNum}. 幹線迴路 (Main Feeder)</span>
                                         <span class="calc-param">線徑: ${cable2.wire_size_label || 'N/A'} (${cable2.total_area_mm2 || 'N/A'}mm²), R = ${R} Ω/km, X = ${X} Ω/km, L = ${len2}m (${L_km}km)</span>
-                                        <span class="calc-formula">公式: ΔV = √3 × I_b × (R·cosθ + X·sinθ) × L</span>
-                                        <span class="calc-process">計算過程: ΔV = 1.732 × ${I_b.toFixed(2)} × (${R}×${PF} + ${X}×${sinPhi.toFixed(3)}) × ${L_km}</span>
+                                        <span class="calc-formula">公式: ${vd2Formula}</span>
+                                        <span class="calc-process">計算過程: ΔV = ${vd2Calc} × (${R}×${PF} + ${X}×${sinPhi.toFixed(3)}) × ${L_km}</span>
                                         <span class="calc-result">結果: ΔV₂ = ${Vd2.toFixed(2)} V (${Vd2_pct.toFixed(2)}%)</span>
                                 </div>`;
                                 segmentNum++;
@@ -1836,7 +1846,7 @@
                             const Z_tr_ohm = (Z_pct / 100) * Z_base;
                             const X_tr = Z_tr_ohm * 0.98;
                             const R_tr = Z_tr_ohm * 0.2;
-                            const Vd_tr = K_phase * I_b * (R_tr * PF + X_tr * sinPhi);
+                            const Vd_tr = K_current * I_b * (R_tr * PF + X_tr * sinPhi);
                             const Vd_tr_pct = (Vd_tr / V_line) * 100;
                             totalDrop += Vd_tr;
                             
@@ -1865,16 +1875,18 @@
                             if (cable3Idx && len3 > 0 && maxSingleInverterPower > 0) {
                                 const cable3 = App.cache.impedance[cable3Idx];
                                 if (cable3) {
-                                    const I_b_secondary = (maxSingleInverterPower * 1000) / (K_phase * V_line);
+                                    const I_b_secondary = (maxSingleInverterPower * 1000) / (K_current * V_line);
                                     const R = cable3.r_ohm || cable3.resistance_ohm_per_km || 0;
                                     const X = cable3.x_ohm || cable3.reactance_ohm_per_km || 0;
                                     const L_km = len3 / 1000;
-                                    const Vd3 = K_phase * I_b_secondary * (R * PF + X * sinPhi) * L_km;
+                                    const Vd3 = K_vd * I_b_secondary * (R * PF + X * sinPhi) * L_km;
                                     const Vd3_pct = (Vd3 / V_line) * 100;
                                     totalDrop += Vd3;
                                     
-                                    const vd3Formula = is3Ph ? 'ΔV = √3 × I_b × (R·cosθ + X·sinθ) × L' : 'ΔV = I_b × (R·cosθ + X·sinθ) × L';
-                                    const vd3Calc = is3Ph ? `1.732 × ${I_b_secondary.toFixed(2)}` : `${I_b_secondary.toFixed(2)}`;
+                                    const vd3Formula = is3Ph
+                                        ? 'ΔV = √3 × I_b × (R·cosθ + X·sinθ) × L'
+                                        : 'ΔV = 2 × I_b × (R·cosθ + X·sinθ) × L';
+                                    const vd3Calc = is3Ph ? `1.732 × ${I_b_secondary.toFixed(2)}` : `2 × ${I_b_secondary.toFixed(2)}`;
                                     
                                     App.reportData.vd.push({
                                         title: `${segmentNum}. 二次側線路 (Secondary Circuit) - 單台最大功率`,
