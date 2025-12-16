@@ -425,6 +425,37 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- 接地 / Breaker Standard -->
+                    <div class="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">接地種類 (Ground Types)</h4>
+                            <div class="overflow-auto flex-grow text-xs border rounded">
+                                <table class="w-full text-center">
+                                    <thead class="bg-gray-50 sticky top-0" id="groundTypeTableHeader"></thead>
+                                    <tbody id="groundTypeTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">接地對應線徑 (Ground Wire Sizes)</h4>
+                            <div class="overflow-auto flex-grow text-xs border rounded">
+                                <table class="w-full text-center">
+                                    <thead class="bg-gray-50 sticky top-0" id="groundWireTableHeader"></thead>
+                                    <tbody id="groundWireTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div class="bg-white rounded-xl border border-gray-200 shadow-sm p-5 h-[450px] flex flex-col">
+                            <h4 class="font-bold text-slate-700 mb-2 border-b pb-2">Breaker Standard</h4>
+                            <div class="overflow-auto flex-grow text-xs border rounded">
+                                <table class="w-full text-center">
+                                    <thead class="bg-gray-50 sticky top-0" id="breakerStdTableHeader"></thead>
+                                    <tbody id="breakerStdTableBody"></tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -724,7 +755,13 @@
 
         const App = {
             db: null,
-            cache: { inverters: [], modules: [], impedance: [], ampPVC: [], ampMetal60: [], ampMetal75: [], ampMetal90: [], conduit: [], conduitFlexNonMetal: [], conduitThickMetal: [], conduitThinMetal: [], inverterImages: [] },
+            cache: { 
+                inverters: [], modules: [], impedance: [], 
+                ampPVC: [], ampMetal60: [], ampMetal75: [], ampMetal90: [], 
+                conduit: [], conduitFlexNonMetal: [], conduitThickMetal: [], conduitThinMetal: [], 
+                inverterImages: [],
+                groundTypes: [], groundWireSizes: [], breakerStandards: []
+            },
             reportData: { params: {}, vd: [], sc: [], planning: [] },
             roofs: [],
 
@@ -898,6 +935,36 @@
                             console.warn('金屬薄管資料表不存在或查詢失敗，使用空資料:', err);
                         }
                         
+                        // --- 追加：接地/斷路器標準（可選資料表，不影響主流程） ---
+                        const fetchOptionalByCandidates = async (candidates, label) => {
+                            for (const table of candidates) {
+                                try {
+                                    const r = await App.db.from(table).select('*');
+                                    if (!r?.error) {
+                                        console.log(`${label} 載入成功: ${table} (${(r.data || []).length}筆)`);
+                                        return r;
+                                    }
+                                    console.warn(`${label} 查詢失敗(${table}):`, r.error);
+                                } catch (e) {
+                                    console.warn(`${label} 資料表不存在或查詢失敗(${table}):`, e);
+                                }
+                            }
+                            return { data: [] };
+                        };
+                        
+                        const groundTypes = await fetchOptionalByCandidates(
+                            ['grounding_types', 'ground_types', 'ground_type', 'earthing_types', 'earthing_type', '接地種類'],
+                            '接地種類'
+                        );
+                        const groundWireSizes = await fetchOptionalByCandidates(
+                            ['grounding_wire_sizes', 'ground_wire_sizes', 'grounding_wire_size_map', 'ground_wire_size_map', 'earthing_wire_sizes', '接地對應線徑'],
+                            '接地對應線徑'
+                        );
+                        const breakerStandards = await fetchOptionalByCandidates(
+                            ['breaker_standard', 'breaker_standards', 'breaker_standard_table', 'breakerStandards', 'breaker', 'breaker_specs'],
+                            'Breaker Standard'
+                        );
+                        
                         App.cache = { 
                             inverters: inv.data||[], 
                             modules: mod.data||[], 
@@ -910,7 +977,10 @@
                             conduitFlexNonMetal: pipeFlexNonMetal.data||[], 
                             conduitThickMetal: pipeThickMetal.data||[], 
                             conduitThinMetal: pipeThinMetal.data||[], 
-                            inverterImages: img.data||[] 
+                            inverterImages: img.data||[],
+                            groundTypes: groundTypes.data || [],
+                            groundWireSizes: groundWireSizes.data || [],
+                            breakerStandards: breakerStandards.data || []
                         };
                         
                         // 檢查是否有關鍵資料
@@ -1448,6 +1518,43 @@
                            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-gray-400 p-4">資料載入中...</td></tr>';
                        }
                    }
+
+                   // 通用表格渲染（用於接地 / breaker standard）
+                   const renderGenericTable = (data, headerId, bodyId) => {
+                       const thead = document.getElementById(headerId);
+                       const tbody = document.getElementById(bodyId);
+                       if (!thead || !tbody) return;
+                       
+                       if (!Array.isArray(data) || data.length === 0) {
+                           thead.innerHTML = '<tr><th class="p-2">資料</th></tr>';
+                           tbody.innerHTML = '<tr><td class="text-center text-gray-400 p-4">資料載入中或無資料...</td></tr>';
+                           return;
+                       }
+                       
+                       const exclude = new Set(['id', 'created_at', 'updated_at', 'uuid']);
+                       const cols = Object.keys(data[0] || {}).filter(k => !exclude.has(k));
+                       const safeCols = cols.length ? cols : Object.keys(data[0] || {});
+                       
+                       const label = (k) => String(k).replace(/_/g, ' ');
+                       thead.innerHTML = `<tr>${safeCols.map(c => `<th class="p-2 border-b">${label(c)}</th>`).join('')}</tr>`;
+                       
+                       const esc = (v) => String(v ?? '')
+                           .replace(/&/g, '&amp;')
+                           .replace(/</g, '&lt;')
+                           .replace(/>/g, '&gt;')
+                           .replace(/"/g, '&quot;');
+                       
+                       tbody.innerHTML = data.map(row => {
+                           return `<tr class="hover:bg-blue-50 transition">${safeCols.map(c => {
+                               const v = row?.[c];
+                               return `<td class="p-2 border-b">${v === null || v === undefined || v === '' ? '-' : esc(v)}</td>`;
+                           }).join('')}</tr>`;
+                       }).join('');
+                   };
+                   
+                   renderGenericTable(App.cache.groundTypes, 'groundTypeTableHeader', 'groundTypeTableBody');
+                   renderGenericTable(App.cache.groundWireSizes, 'groundWireTableHeader', 'groundWireTableBody');
+                   renderGenericTable(App.cache.breakerStandards, 'breakerStdTableHeader', 'breakerStdTableBody');
                    
                    if(document.getElementById('inverterTableBody')) document.getElementById('inverterTableBody').innerHTML = App.cache.inverters.map((i,x)=>`<tr class="cursor-pointer border-b hover:bg-blue-50 transition" onclick="App.ui.openDetail('inverter',${x})"><td class="p-3 text-blue-600 font-bold">${i.model_name}</td><td class="p-3">${i.rated_output_power_kw}</td><td class="p-3">${i.max_input_voltage_v}</td><td class="p-3">${i.num_mpp_trackers}</td><td class="p-3">${i.max_efficiency_percent}%</td><td class="p-3 text-center"><i class="fa-solid fa-info-circle text-gray-400"></i></td></tr>`).join('');
                    if(document.getElementById('moduleTableBody')) document.getElementById('moduleTableBody').innerHTML = App.cache.modules.map((m,x)=>`<tr class="cursor-pointer border-b hover:bg-blue-50 transition" onclick="App.ui.openDetail('module',${x})"><td class="p-3">${m.manufacturer}</td><td class="p-3 font-bold text-blue-600">${m.model_number}</td><td class="p-3">${m.p_max}</td><td class="p-3">${m.v_oc}</td><td class="p-3">${m.i_sc}</td><td class="p-3 text-center"><i class="fa-solid fa-info-circle text-gray-400"></i></td></tr>`).join('');
